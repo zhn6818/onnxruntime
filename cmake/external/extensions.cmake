@@ -26,5 +26,5 @@ endif()
 add_subdirectory(${onnxruntime_EXTENSIONS_PATH} ${onnxruntime_EXTENSIONS_PATH}/_subbuild EXCLUDE_FROM_ALL)
 
 # target library or executable are defined in CMakeLists.txt of onnxruntime-extensions
-target_include_directories(ocos_operators PRIVATE ${RE2_INCLUDE_DIR} external/json/include)
+target_include_directories(ocos_operators PRIVATE ${RE2_INCLUDE_DIR} ${json_SOURCE_DIR}/include)
 target_include_directories(ortcustomops PUBLIC ${onnxruntime_EXTENSIONS_PATH}/includes)
