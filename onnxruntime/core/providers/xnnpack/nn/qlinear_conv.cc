@@ -117,7 +117,7 @@ class QLinearConv : public OpKernel {
 Status QLinearConv::Compute(OpKernelContext* context) const {
 #ifdef PROFILE
   auto start = std::chrono::steady_clock::now();
-#endf
+#endif
 
   const Tensor* X = context->Input<Tensor>(0);
   const Tensor* W = context->Input<Tensor>(3);
