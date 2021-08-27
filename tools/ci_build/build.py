@@ -534,7 +534,7 @@ def parse_arguments():
         help="Build ONNXRuntime micro-benchmarks.")
 
     parser.add_argument(
-        "--build_xnnpack", action='store_true',
+        "--build_xnnpack", default=True,
         help="Build XNNPack EP for ARM.")
 
     return parser.parse_args()
