@@ -1279,8 +1279,8 @@ def setup_rocm_build(args, configs):
                              "rocm_home='{}' valid={}."
                              .format(rocm_home, rocm_home_not_valid))
 
-        for config in configs:
-            amd_hipify(get_config_build_dir(args.build_dir, config))
+        # for config in configs:
+        #     amd_hipify(get_config_build_dir(args.build_dir, config))
     return rocm_home or ''
 
 
