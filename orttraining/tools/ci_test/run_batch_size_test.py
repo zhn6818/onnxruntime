@@ -46,7 +46,7 @@ def main():
     ]
 
     configs['MI100_32G'] = [
-        Config(True, 128, 200, 20, ""),
+        Config(True, 128, 192, 20, ""),
         Config(True, 512, 30, 80, ""),
         Config(False, 128, 108, 20, ""),
         Config(False, 512, 16, 80, ""),
