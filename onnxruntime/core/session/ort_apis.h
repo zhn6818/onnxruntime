@@ -125,6 +125,7 @@ ORT_API_STATUS_IMPL(CreateTensorWithDataAsOrtValue, _In_ const OrtMemoryInfo* in
                     _Inout_ void* p_data, size_t p_data_len, _In_ const int64_t* shape, size_t shape_len,
                     ONNXTensorElementDataType type, _Outptr_ OrtValue** out);
 ORT_API_STATUS_IMPL(IsTensor, _In_ const OrtValue* value, _Out_ int* out);
+ORT_API_STATUS_IMPL(HasValue, _In_ const OrtValue* value, _Out_ int* out);
 ORT_API_STATUS_IMPL(GetTensorMutableData, _Inout_ OrtValue* value, _Outptr_ void** out);
 ORT_API_STATUS_IMPL(FillStringTensor, _Inout_ OrtValue* value, _In_ const char* const* s, size_t s_len);
 ORT_API_STATUS_IMPL(FillStringTensorElement, _Inout_ OrtValue* value, _In_ const char* s, size_t index);
@@ -288,4 +289,33 @@ ORT_API(void, ReleaseTensorRTProviderOptions, _Frees_ptr_opt_ OrtTensorRTProvide
 ORT_API_STATUS_IMPL(EnableOrtCustomOps, _Inout_ OrtSessionOptions* options);
 ORT_API_STATUS_IMPL(RegisterAllocator, _Inout_ OrtEnv* env, _In_ OrtAllocator* allocator);
 ORT_API_STATUS_IMPL(UnregisterAllocator, _Inout_ OrtEnv* env, _In_ const OrtMemoryInfo* mem_info);
+// SparseTensor related API
+ORT_API_STATUS_IMPL(IsSparseTensor, _In_ const OrtValue* value, _Out_ int* out);
+ORT_API_STATUS_IMPL(CreateSparseTensorAsOrtValue, _Inout_ OrtAllocator* allocator, _In_ const int64_t* dense_shape,
+                    size_t dense_shape_len, ONNXTensorElementDataType type, _Outptr_ OrtValue** out);
+ORT_API_STATUS_IMPL(FillSparseTensorCoo, _Inout_ OrtValue* ort_value, _In_ const OrtMemoryInfo* mem_info,
+                    _In_ const int64_t* values_shape, size_t values_shape_len, _In_ const void* values,
+                    _In_ const int64_t* indices_data, size_t indices_num);
+ORT_API_STATUS_IMPL(FillSparseTensorCsr, _Inout_ OrtValue* ort_value, _In_ const OrtMemoryInfo* data_mem_info,
+                    _In_ const int64_t* values_shape, size_t values_shape_len, _In_ const void* values,
+                    _In_ const int64_t* inner_indices_data, size_t inner_indices_num,
+                    _In_ const int64_t* outer_indices_data, size_t outer_indices_num);
+ORT_API_STATUS_IMPL(FillSparseTensorBlockSparse, _Inout_ OrtValue* ort_value, _In_ const OrtMemoryInfo* data_mem_info,
+                    _In_ const int64_t* values_shape, size_t values_shape_len, _In_ const void* values,
+                    _In_ const int64_t* indices_shape_data, size_t indices_shape_len,
+                    _In_ const int32_t* indices_data);
+ORT_API_STATUS_IMPL(CreateSparseTensorWithValuesAsOrtValue, _In_ const OrtMemoryInfo* info, _Inout_ void* p_data,
+                    _In_ const int64_t* dense_shape, size_t dense_shape_len,
+                    _In_ const int64_t* values_shape, size_t values_shape_len,
+                    ONNXTensorElementDataType type, _Outptr_ OrtValue** out);
+ORT_API_STATUS_IMPL(UseCooIndices, _Inout_ OrtValue* ort_value, _Inout_ int64_t* indices_data, size_t indices_num);
+ORT_API_STATUS_IMPL(UseCsrIndices, _Inout_ OrtValue*, _Inout_ int64_t* inner_data, size_t inner_num, _Inout_ int64_t* outer_data, size_t outer_num);
+ORT_API_STATUS_IMPL(UseBlockSparseIndices, _Inout_ OrtValue* ort_value, const int64_t* indices_shape, size_t indices_shape_len, _Inout_ int32_t* indices_data);
+ORT_API_STATUS_IMPL(GetSparseTensorFormat, _In_ const OrtValue* ort_value, _Out_ enum OrtSparseFormat* out);
+ORT_API_STATUS_IMPL(GetSparseTensorValuesTypeAndShape, _In_ const OrtValue* ort_value, _Outptr_ OrtTensorTypeAndShapeInfo** out);
+ORT_API_STATUS_IMPL(GetSparseTensorValues, _In_ const OrtValue* ort_value, _Outptr_ const void** out);
+ORT_API_STATUS_IMPL(GetSparseTensorIndicesTypeShape, _In_ const OrtValue* ort_value, enum OrtSparseIndicesFormat indices_format, _Outptr_ OrtTensorTypeAndShapeInfo** out);
+ORT_API_STATUS_IMPL(GetSparseTensorIndices, _In_ const OrtValue* ort_value, enum OrtSparseIndicesFormat indices_format, _Out_ size_t* num_indices, _Outptr_ const void** indices);
+ORT_API_STATUS_IMPL(KernelContext_GetGPUComputeStream, _In_ const OrtKernelContext* context, _Outptr_ void** out);
+
 }  // namespace OrtApis

@@ -21,14 +21,14 @@ class Tokenizer final : public OpKernel {
 
  private:
   Status CharTokenize(OpKernelContext* context, size_t N, size_t C,
-                      const std::vector<int64_t>& input_dims) const;
+                      gsl::span<const int64_t> input_dims) const;
 
   Status SeparatorExpressionTokenizer(OpKernelContext* context, size_t N, size_t C,
-                                      const std::vector<int64_t>& input_dims) const;
+                                      gsl::span<const int64_t> input_dims) const;
 
   Status TokenExpression(OpKernelContext* ctx,
                          size_t N, size_t C,
-                         const std::vector<int64_t>& input_dims) const;
+                         gsl::span<const int64_t> input_dims) const;
 
   bool mark_{false};
   std::string pad_value_;
@@ -114,7 +114,7 @@ Tokenizer::Tokenizer(const OpKernelInfo& info) : OpKernel(info) {
 }
 
 Status Tokenizer::CharTokenize(OpKernelContext* ctx, size_t N, size_t C,
-                               const std::vector<int64_t>& input_dims) const {
+                               gsl::span<const int64_t> input_dims) const {
   // With char tokenzation we get as many tokens as the number of
   // utf8 characters in the string. So for every string we calculate its character(utf8) length
   // add padding and add start/end test separators if necessary
@@ -128,14 +128,16 @@ Status Tokenizer::CharTokenize(OpKernelContext* ctx, size_t N, size_t C,
     size_t tokens = 0;  // length in utf8 chars
     if (!utf8_validate(reinterpret_cast<const unsigned char*>(s.data()), s.size(),
                        tokens)) {
+      // Please do not include the input text in the error message as it could
+      // be deemed as a compliance violation by teams using this operator
       return Status(common::ONNXRUNTIME, common::INVALID_ARGUMENT,
-                    "Input string contains invalid utf8 chars: " + s);
+                    "Input string contains invalid utf8 chars");
     }
     max_tokens = std::max(max_tokens, tokens);
     ++curr_input;
   }
 
-  std::vector<int64_t> output_dims(input_dims);
+  std::vector<int64_t> output_dims(input_dims.begin(), input_dims.end());
   // Check if we have no output due to apparently empty strings input.
   if (max_tokens == 0) {
     output_dims.push_back(0);
@@ -191,7 +193,7 @@ Status Tokenizer::CharTokenize(OpKernelContext* ctx, size_t N, size_t C,
 
 Status Tokenizer::SeparatorExpressionTokenizer(OpKernelContext* ctx,
                                                size_t N, size_t C,
-                                               const std::vector<int64_t>& input_dims) const {
+                                               gsl::span<const int64_t> input_dims) const {
   using namespace re2;
   std::vector<std::vector<StringPiece>> rows;
   rows.reserve(N * C);
@@ -274,7 +276,7 @@ Status Tokenizer::SeparatorExpressionTokenizer(OpKernelContext* ctx,
     ++curr_input;
   }
 
-  std::vector<int64_t> output_dims(input_dims);
+  std::vector<int64_t> output_dims(input_dims.begin(), input_dims.end());
   // Check if we have no output due to either empty input
   // everything is a separator
   if (max_tokens == 0) {
@@ -332,7 +334,7 @@ Status Tokenizer::SeparatorExpressionTokenizer(OpKernelContext* ctx,
 
 Status Tokenizer::TokenExpression(OpKernelContext* ctx,
                                   size_t N, size_t C,
-                                  const std::vector<int64_t>& input_dims) const {
+                                  gsl::span<const int64_t> input_dims) const {
   using namespace re2;
   // Represents a token that will be output after
   // first is the index, second is the size;
@@ -398,7 +400,7 @@ Status Tokenizer::TokenExpression(OpKernelContext* ctx,
   }
 
   // Check for empty output
-  std::vector<int64_t> output_dims(input_dims);
+  std::vector<int64_t> output_dims(input_dims.begin(), input_dims.end());
   // Check if we have no output due to either empty input
   // everything is a separator
   if (max_tokens == 0) {
@@ -466,7 +468,7 @@ Status Tokenizer::Compute(OpKernelContext* ctx) const {
   }
 
   auto& input_shape = X->Shape();
-  auto& input_dims = input_shape.GetDims();
+  auto input_dims = input_shape.GetDims();
   size_t N = 0;
   size_t C = 0;
   if (input_dims.size() == 1) {

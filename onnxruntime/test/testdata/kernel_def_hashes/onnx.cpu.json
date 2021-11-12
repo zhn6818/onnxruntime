@@ -256,6 +256,14 @@
         17832136363477464736
     ],
     [
+        "BatchNormalization ai.onnx CPUExecutionProvider",
+        3016597991190826984
+    ],
+    [
+        "BatchNormalization ai.onnx CPUExecutionProvider",
+        9270095107043637928
+    ],
+    [
         "BitShift ai.onnx CPUExecutionProvider",
         4758677670685660688
     ],
@@ -916,6 +924,10 @@
         16515685968327103576
     ],
     [
+        "Identity ai.onnx CPUExecutionProvider",
+        17661628575887109792
+    ],
+    [
         "If ai.onnx CPUExecutionProvider",
         2236645891232685176
     ],
@@ -926,6 +938,10 @@
     [
         "If ai.onnx CPUExecutionProvider",
         17525337343748410800
+    ],
+    [
+        "If ai.onnx CPUExecutionProvider",
+        14605093928914589528
     ],
     [
         "InstanceNormalization ai.onnx CPUExecutionProvider",
@@ -1062,6 +1078,10 @@
     [
         "Loop ai.onnx CPUExecutionProvider",
         18226282479886582688
+    ],
+    [
+        "Loop ai.onnx CPUExecutionProvider",
+        3437102755395866648
     ],
     [
         "LpNormalization ai.onnx CPUExecutionProvider",
@@ -1456,6 +1476,18 @@
         15162687909384154912
     ],
     [
+        "Optional ai.onnx CPUExecutionProvider",
+        4007199385789893408
+    ],
+    [
+        "OptionalGetElement ai.onnx CPUExecutionProvider",
+        8727767224223660008
+    ],
+    [
+        "OptionalHasElement ai.onnx CPUExecutionProvider",
+        103583056104706000
+    ],
+    [
         "Or ai.onnx CPUExecutionProvider",
         18295541712828245416
     ],
@@ -1482,6 +1514,10 @@
     [
         "Pow ai.onnx CPUExecutionProvider",
         12963226513247425672
+    ],
+    [
+        "Pow ai.onnx CPUExecutionProvider",
+        16138602580714332296
     ],
     [
         "PRelu ai.onnx CPUExecutionProvider",
@@ -2158,6 +2194,10 @@
     [
         "Shape ai.onnx CPUExecutionProvider",
         14989007508280400584
+    ],
+    [
+        "Shape ai.onnx CPUExecutionProvider",
+        9917761852037658112
     ],
     [
         "Shrink ai.onnx CPUExecutionProvider",

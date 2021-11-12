@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "pch.h"
+#include "lib/Api/pch/pch.h"
 #include "LearningModelDevice.h"
 
 #include <D3d11_4.h>
@@ -100,7 +100,7 @@ LearningModelDevice::GetDeviceQueue() {
 
 STDMETHODIMP
 LearningModelDevice::SetMetacommandsEnabled(boolean enabled) {
-  m_areMetacommandsEnabled = enabled;
+  m_areMetacommandsEnabled = (enabled != 0);
   return S_OK;
 }
 

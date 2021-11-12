@@ -33,7 +33,7 @@ const TEST_DATA_OP_ROOT = path.join(TEST_ROOT, 'data', 'ops');
 const TEST_DATA_BASE = args.env === 'node' ? TEST_ROOT : '/base/test/';
 
 let testlist: Test.TestList;
-const shouldLoadSuiteTestData = (args.mode === 'suite0');
+const shouldLoadSuiteTestData = (args.mode === 'suite0' || args.mode === 'suite1');
 if (shouldLoadSuiteTestData) {
   npmlog.verbose('TestRunnerCli.Init', 'Loading testlist...');
 
@@ -48,7 +48,7 @@ if (shouldLoadSuiteTestData) {
 // The default backends and opset version lists. Those will be used in suite tests.
 const DEFAULT_BACKENDS: readonly TestRunnerCliArgs.Backend[] =
     args.env === 'node' ? ['cpu', 'wasm'] : ['wasm', 'webgl'];
-const DEFAULT_OPSET_VERSIONS: readonly number[] = [12, 11, 10, 9, 8, 7];
+const DEFAULT_OPSET_VERSIONS: readonly number[] = [13, 12, 11, 10, 9, 8, 7];
 
 const FILE_CACHE_ENABLED = args.fileCache;         // whether to enable file cache
 const FILE_CACHE_MAX_FILE_SIZE = 1 * 1024 * 1024;  // The max size of the file that will be put into file cache
@@ -90,13 +90,16 @@ let unittest = false;
 npmlog.verbose('TestRunnerCli.Init', 'Preparing test config...');
 switch (args.mode) {
   case 'suite0':
+  case 'suite1':
     for (const backend of DEFAULT_BACKENDS) {
       if (args.backends.indexOf(backend) !== -1) {
         modelTestGroups.push(...nodeTests.get(backend)!);  // model test : node
         opTestGroups.push(...opTests.get(backend)!);       // operator test
       }
     }
-    unittest = true;
+    if (args.mode === 'suite0') {
+      unittest = true;
+    }
     break;
 
   case 'model':
@@ -159,8 +162,8 @@ function validateTestList() {
         const testCaseName = typeof testCase === 'string' ? testCase : testCase.name;
         let found = false;
         for (const testGroup of nodeTest) {
-          found =
-              found || testGroup.tests.some(test => minimatch(test.modelUrl, path.join('**', testCaseName, '*.onnx')));
+          found = found ||
+              testGroup.tests.some(test => minimatch(test.modelUrl, path.join('**', testCaseName, '*.+(onnx|ort)')));
         }
         if (!found) {
           throw new Error(`node model test case '${testCaseName}' in test list does not exist.`);
@@ -562,7 +565,7 @@ function getBrowserNameFromEnv(env: TestRunnerCliArgs['env'], debug?: boolean) {
     case 'safari':
       return 'Safari';
     case 'bs':
-      return process.env.ONNXJS_TEST_BS_BROWSERS!;
+      return process.env.ORT_WEB_TEST_BS_BROWSERS!;
     default:
       throw new Error(`env "${env}" not supported.`);
   }

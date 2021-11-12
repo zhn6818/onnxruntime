@@ -3,7 +3,11 @@
 
 if(UNIX)
   set(SYMBOL_FILE ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime.lds)
-  set(OUTPUT_STYLE gcc)
+  if(APPLE)
+    set(OUTPUT_STYLE xcode)
+  else()
+    set(OUTPUT_STYLE gcc)
+  endif()  
 else()
   set(SYMBOL_FILE ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime_dll.def)
   set(OUTPUT_STYLE vc)
@@ -114,6 +118,7 @@ endif()
 
 if (NOT WIN32)
   if (APPLE OR ${CMAKE_SYSTEM_NAME} MATCHES "^iOS")
+    set(ONNXRUNTIME_SO_LINK_FLAG " -Wl,-exported_symbols_list,${SYMBOL_FILE}")
     if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
       set_target_properties(onnxruntime PROPERTIES
         SOVERSION ${ORT_VERSION}
@@ -121,7 +126,6 @@ if (NOT WIN32)
         INSTALL_RPATH_USE_LINK_PATH FALSE
         BUILD_WITH_INSTALL_NAME_DIR TRUE
         INSTALL_NAME_DIR @rpath)
-      set(ONNXRUNTIME_SO_LINK_FLAG " -Wl,-exported_symbols_list,${SYMBOL_FILE}")
     else()
         set_target_properties(onnxruntime PROPERTIES INSTALL_RPATH "@loader_path")
     endif()
@@ -175,8 +179,8 @@ set(onnxruntime_INTERNAL_LIBRARIES
   ${onnxruntime_tvm_libs}
   onnxruntime_framework
   onnxruntime_graph
+  ${ONNXRUNTIME_MLAS_LIBS}
   onnxruntime_common
-  onnxruntime_mlas
   onnxruntime_flatbuffers
 )
 

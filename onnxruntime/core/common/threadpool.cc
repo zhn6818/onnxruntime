@@ -46,9 +46,7 @@ ThreadPoolProfiler::ThreadPoolProfiler(int num_threads, const CHAR_TYPE* thread_
   child_thread_stats_.assign(num_threads, {});
   if (thread_pool_name) {
 #ifdef _WIN32
-    using convert_type = std::codecvt_utf8<wchar_t>;
-    std::wstring_convert<convert_type, wchar_t> converter;
-    thread_pool_name_ = converter.to_bytes(thread_pool_name);
+    thread_pool_name_ = ToMBString(thread_pool_name);
 #else
     thread_pool_name_ = thread_pool_name;
 #endif
@@ -408,7 +406,8 @@ void ThreadPool::ParallelForFixedBlockSizeScheduling(const std::ptrdiff_t total,
   // hence we need at most one for each thread, even if the numberof blocks of iterations is larger.
   auto d_of_p = DegreeOfParallelism(this);
   auto num_blocks = total / block_size;
-  int num_work_items = static_cast<int>(std::min(static_cast<std::ptrdiff_t>(d_of_p), num_blocks));
+  auto num_threads_inc_main = NumThreads() + 1;
+  int num_work_items = static_cast<int>(std::min(static_cast<std::ptrdiff_t>(num_threads_inc_main), num_blocks));
   assert(num_work_items > 0);
 
   LoopCounter lc(total, d_of_p, block_size);

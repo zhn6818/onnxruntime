@@ -8,6 +8,7 @@ Do not modify directly.*
   * <a href="#com.microsoft.BiasDropout">com.microsoft.BiasDropout</a>
   * <a href="#com.microsoft.BiasGelu">com.microsoft.BiasGelu</a>
   * <a href="#com.microsoft.BiasSoftmax">com.microsoft.BiasSoftmax</a>
+  * <a href="#com.microsoft.BifurcationDetector">com.microsoft.BifurcationDetector</a>
   * <a href="#com.microsoft.CDist">com.microsoft.CDist</a>
   * <a href="#com.microsoft.ComplexMul">com.microsoft.ComplexMul</a>
   * <a href="#com.microsoft.ComplexMulConj">com.microsoft.ComplexMulConj</a>
@@ -35,11 +36,9 @@ Do not modify directly.*
   * <a href="#com.microsoft.MurmurHash3">com.microsoft.MurmurHash3</a>
   * <a href="#com.microsoft.NGramRepeatBlock">com.microsoft.NGramRepeatBlock</a>
   * <a href="#com.microsoft.NhwcMaxPool">com.microsoft.NhwcMaxPool</a>
-  * <a href="#com.microsoft.Optional">com.microsoft.Optional</a>
-  * <a href="#com.microsoft.OptionalGetElement">com.microsoft.OptionalGetElement</a>
-  * <a href="#com.microsoft.OptionalHasElement">com.microsoft.OptionalHasElement</a>
   * <a href="#com.microsoft.Pad">com.microsoft.Pad</a>
   * <a href="#com.microsoft.QAttention">com.microsoft.QAttention</a>
+  * <a href="#com.microsoft.QGemm">com.microsoft.QGemm</a>
   * <a href="#com.microsoft.QLinearAdd">com.microsoft.QLinearAdd</a>
   * <a href="#com.microsoft.QLinearAveragePool">com.microsoft.QLinearAveragePool</a>
   * <a href="#com.microsoft.QLinearConcat">com.microsoft.QLinearConcat</a>
@@ -113,7 +112,7 @@ This version of the operator has been available since version 1 of the 'com.micr
 
 <dl>
 <dt><tt>output</tt> : T</dt>
-<dd>3D output tensor with shape (batch_size, append_length, hidden_size)</dd>
+<dd>3D output tensor with shape (batch_size, sequence_length, hidden_size)</dd>
 <dt><tt>present</tt> (optional) : T</dt>
 <dd>present state for key and value with shape (2, batch_size, num_heads, past_sequence_length + sequence_length, head_size)</dd>
 </dl>
@@ -358,7 +357,7 @@ This version of the operator has been available since version 1 of the 'com.micr
 <dt><tt>data</tt> : T</dt>
 <dd>The input data as Tensor.</dd>
 <dt><tt>bias</tt> : T</dt>
-<dd>The bias input, a vector with the same shape as last dim of data</dd>
+<dd>The bias input, a vector with the same shape as last dim of data OR same shape with data</dd>
 <dt><tt>residual</tt> (optional) : T</dt>
 <dd>The residual input, must have the same shape as data</dd>
 <dt><tt>ratio</tt> (optional) : T1</dt>
@@ -459,6 +458,62 @@ This version of the operator has been available since version 1 of the 'com.micr
 <dl>
 <dt><tt>T</tt> : tensor(float16), tensor(float), tensor(double)</dt>
 <dd>Constrain input and output types to float tensors.</dd>
+</dl>
+
+
+### <a name="com.microsoft.BifurcationDetector"></a><a name="com.microsoft.bifurcationdetector">**com.microsoft.BifurcationDetector**</a>
+
+  Component for aggressive decoding. Find the bifurcation index of predicted tokens, between source tokens,
+  starting from previous suffix match index, and predicted tokens.
+  Concat predicted tokens, starting from bifurcation index, to the back
+  of current tokens. This forms the output tokens.
+  Detect suffix match index in source tokens, between source tokens and output tokens.
+  Detection is based on finding the appearances of last n-gram in output tokens
+  in source tokens.
+  A match is considered found if source tokens contain a single matching n-gram.
+  Return the index of the start of the n-gram in source tokens.
+  No matching if found if src tokens contain multiple or zero matching n-grams. Return -1.
+
+#### Version
+
+This version of the operator has been available since version 1 of the 'com.microsoft' operator set.
+
+#### Attributes
+
+<dl>
+<dt><tt>max_ngram_size</tt> : int</dt>
+<dd>The maximum NGram size for suffix matching.</dd>
+<dt><tt>min_ngram_size</tt> : int</dt>
+<dd>The minimum NGram size for suffix matching.</dd>
+</dl>
+
+#### Inputs (3 - 4)
+
+<dl>
+<dt><tt>src_tokens</tt> : T</dt>
+<dd>Encoder input ids.</dd>
+<dt><tt>cur_tokens</tt> : T</dt>
+<dd>Decoder input ids.</dd>
+<dt><tt>prev_suffix_match_idx</tt> : T</dt>
+<dd>Previous suffix match index</dd>
+<dt><tt>pred_tokens</tt> (optional) : T</dt>
+<dd>Predicted token ids from aggressive decoding</dd>
+</dl>
+
+#### Outputs
+
+<dl>
+<dt><tt>tokens</tt> : T</dt>
+<dd>Decoder input ids after merging predicted tokens</dd>
+<dt><tt>suffix_match_idx</tt> : T</dt>
+<dd>new suffix match index</dd>
+</dl>
+
+#### Type Constraints
+
+<dl>
+<dt><tt>T</tt> : tensor(int64)</dt>
+<dd>Constrain to integer types.</dd>
 </dl>
 
 
@@ -841,7 +896,7 @@ This version of the operator has been available since version 1 of the 'com.micr
 <dd>The epsilon value to use to avoid division by zero.</dd>
 </dl>
 
-#### Inputs (7 - 8)
+#### Inputs (7 - 9)
 
 <dl>
 <dt><tt>input_ids</tt> : T1</dt>
@@ -860,15 +915,19 @@ This version of the operator has been available since version 1 of the 'com.micr
 <dd>1D beta tensor for layer normalization  with shape (hidden_size)</dd>
 <dt><tt>mask</tt> (optional) : T1</dt>
 <dd>2D attention mask with shape (batch_size, sequence_length)</dd>
+<dt><tt>position_ids</tt> (optional) : T1</dt>
+<dd>2D position ids with shape (batch_size, sequence_length)</dd>
 </dl>
 
-#### Outputs
+#### Outputs (2 - 3)
 
 <dl>
 <dt><tt>output</tt> : T</dt>
 <dd>3D output tensor with shape (batch_size, sequence_length, hidden_size)</dd>
 <dt><tt>mask_index</tt> : T1</dt>
 <dd>1D mask_index tensor with shape (batch_size)</dd>
+<dt><tt>embedding_sum</tt> (optional) : T</dt>
+<dd>sum of word_embedding and position_embedding without layer normalization</dd>
 </dl>
 
 #### Type Constraints
@@ -1666,114 +1725,6 @@ This version of the operator has been available since version 1 of the 'com.micr
 </dl>
 
 
-### <a name="com.microsoft.Optional"></a><a name="com.microsoft.optional">**com.microsoft.Optional**</a>
-
-  Construct an optional type containing either an empty optional of a certain type specified by the attribute, "
-        "or an optional type containing the 'input' element."
-        
-
-#### Version
-
-This version of the operator has been available since version 1 of the 'com.microsoft' operator set.
-
-#### Attributes
-
-<dl>
-<dt><tt>type</tt> : ???</dt>
-<dd>Type of the element in the optional output</dd>
-</dl>
-
-#### Inputs (0 - 1)
-
-<dl>
-<dt><tt>input</tt> (optional) : V</dt>
-<dd>The input element.</dd>
-</dl>
-
-#### Outputs
-
-<dl>
-<dt><tt>output</tt> : O</dt>
-<dd>The optional output enclosing the input element.</dd>
-</dl>
-
-#### Type Constraints
-
-<dl>
-<dt><tt>V</tt> : tensor(uint8), tensor(uint16), tensor(uint32), tensor(uint64), tensor(int8), tensor(int16), tensor(int32), tensor(int64), tensor(float16), tensor(float), tensor(double), tensor(string), tensor(bool), tensor(complex64), tensor(complex128), seq(tensor(uint8)), seq(tensor(uint16)), seq(tensor(uint32)), seq(tensor(uint64)), seq(tensor(int8)), seq(tensor(int16)), seq(tensor(int32)), seq(tensor(int64)), seq(tensor(float16)), seq(tensor(float)), seq(tensor(double)), seq(tensor(string)), seq(tensor(bool)), seq(tensor(complex64)), seq(tensor(complex128))</dt>
-<dd>Constrains input type to all tensor and sequence types.</dd>
-<dt><tt>O</tt> : optional(tensor(uint8)), optional(tensor(uint16)), optional(tensor(uint32)), optional(tensor(uint64)), optional(tensor(int8)), optional(tensor(int16)), optional(tensor(int32)), optional(tensor(int64)), optional(tensor(float16)), optional(tensor(float)), optional(tensor(double)), optional(tensor(string)), optional(tensor(bool)), optional(tensor(complex64)), optional(tensor(complex128)), optional(seq(tensor(uint8))), optional(seq(tensor(uint16))), optional(seq(tensor(uint32))), optional(seq(tensor(uint64))), optional(seq(tensor(int8))), optional(seq(tensor(int16))), optional(seq(tensor(int32))), optional(seq(tensor(int64))), optional(seq(tensor(float16))), optional(seq(tensor(float))), optional(seq(tensor(double))), optional(seq(tensor(string))), optional(seq(tensor(bool))), optional(seq(tensor(complex64))), optional(seq(tensor(complex128)))</dt>
-<dd>Constrains output type to all optional tensor or optional sequence types.</dd>
-</dl>
-
-
-### <a name="com.microsoft.OptionalGetElement"></a><a name="com.microsoft.optionalgetelement">**com.microsoft.OptionalGetElement**</a>
-
-  Outputs the element in the optional-type input'. It is an error if the input value does not have an element "
-        "and the behavior is undefined in this case."
-        
-
-#### Version
-
-This version of the operator has been available since version 1 of the 'com.microsoft' operator set.
-
-#### Inputs
-
-<dl>
-<dt><tt>input</tt> : O</dt>
-<dd>The optional input.</dd>
-</dl>
-
-#### Outputs
-
-<dl>
-<dt><tt>output</tt> : V</dt>
-<dd>Output element in the optional input.</dd>
-</dl>
-
-#### Type Constraints
-
-<dl>
-<dt><tt>O</tt> : optional(tensor(uint8)), optional(tensor(uint16)), optional(tensor(uint32)), optional(tensor(uint64)), optional(tensor(int8)), optional(tensor(int16)), optional(tensor(int32)), optional(tensor(int64)), optional(tensor(float16)), optional(tensor(float)), optional(tensor(double)), optional(tensor(string)), optional(tensor(bool)), optional(tensor(complex64)), optional(tensor(complex128)), optional(seq(tensor(uint8))), optional(seq(tensor(uint16))), optional(seq(tensor(uint32))), optional(seq(tensor(uint64))), optional(seq(tensor(int8))), optional(seq(tensor(int16))), optional(seq(tensor(int32))), optional(seq(tensor(int64))), optional(seq(tensor(float16))), optional(seq(tensor(float))), optional(seq(tensor(double))), optional(seq(tensor(string))), optional(seq(tensor(bool))), optional(seq(tensor(complex64))), optional(seq(tensor(complex128)))</dt>
-<dd>Constrains input type to optional tensor and optional sequence types.</dd>
-<dt><tt>V</tt> : tensor(uint8), tensor(uint16), tensor(uint32), tensor(uint64), tensor(int8), tensor(int16), tensor(int32), tensor(int64), tensor(float16), tensor(float), tensor(double), tensor(string), tensor(bool), tensor(complex64), tensor(complex128), seq(tensor(uint8)), seq(tensor(uint16)), seq(tensor(uint32)), seq(tensor(uint64)), seq(tensor(int8)), seq(tensor(int16)), seq(tensor(int32)), seq(tensor(int64)), seq(tensor(float16)), seq(tensor(float)), seq(tensor(double)), seq(tensor(string)), seq(tensor(bool)), seq(tensor(complex64)), seq(tensor(complex128))</dt>
-<dd>Constrain output type to all tensor or sequence types.</dd>
-</dl>
-
-
-### <a name="com.microsoft.OptionalHasElement"></a><a name="com.microsoft.optionalhaselement">**com.microsoft.OptionalHasElement**</a>
-
-  Returns true if the optional-type input contains an element. If it is an empty optional-type, this op returns false.
-        
-
-#### Version
-
-This version of the operator has been available since version 1 of the 'com.microsoft' operator set.
-
-#### Inputs
-
-<dl>
-<dt><tt>input</tt> : O</dt>
-<dd>The optional input.</dd>
-</dl>
-
-#### Outputs
-
-<dl>
-<dt><tt>output</tt> : B</dt>
-<dd>A scalar boolean tensor. If true, it indicates that optional-type input contains an element. Otherwise, it is empty.</dd>
-</dl>
-
-#### Type Constraints
-
-<dl>
-<dt><tt>O</tt> : optional(tensor(uint8)), optional(tensor(uint16)), optional(tensor(uint32)), optional(tensor(uint64)), optional(tensor(int8)), optional(tensor(int16)), optional(tensor(int32)), optional(tensor(int64)), optional(tensor(float16)), optional(tensor(float)), optional(tensor(double)), optional(tensor(string)), optional(tensor(bool)), optional(tensor(complex64)), optional(tensor(complex128)), optional(seq(tensor(uint8))), optional(seq(tensor(uint16))), optional(seq(tensor(uint32))), optional(seq(tensor(uint64))), optional(seq(tensor(int8))), optional(seq(tensor(int16))), optional(seq(tensor(int32))), optional(seq(tensor(int64))), optional(seq(tensor(float16))), optional(seq(tensor(float))), optional(seq(tensor(double))), optional(seq(tensor(string))), optional(seq(tensor(bool))), optional(seq(tensor(complex64))), optional(seq(tensor(complex128)))</dt>
-<dd>Constrains input type to optional tensor and optional sequence types.</dd>
-<dt><tt>B</tt> : tensor(bool)</dt>
-<dd>Constrains output to a boolean tensor.</dd>
-</dl>
-
-
 ### <a name="com.microsoft.Pad"></a><a name="com.microsoft.pad">**com.microsoft.Pad**</a>
 
   Given `data` tensor, pads, mode, and value.
@@ -1891,6 +1842,73 @@ This version of the operator has been available since version 1 of the 'com.micr
 <dd>Constrain input and output types to float tensors.</dd>
 <dt><tt>T4</tt> : tensor(int32)</dt>
 <dd>Constrain mask index to integer types</dd>
+</dl>
+
+
+### <a name="com.microsoft.QGemm"></a><a name="com.microsoft.qgemm">**com.microsoft.QGemm**</a>
+
+  Quantized Gemm
+
+#### Version
+
+This version of the operator has been available since version 1 of the 'com.microsoft' operator set.
+
+#### Attributes
+
+<dl>
+<dt><tt>alpha</tt> : float</dt>
+<dd>Scalar multiplier for the product of input tensors A * B.</dd>
+<dt><tt>transA</tt> : int</dt>
+<dd>Whether A should be transposed</dd>
+<dt><tt>transB</tt> : int</dt>
+<dd>Whether B should be transposed</dd>
+</dl>
+
+#### Inputs (6 - 9)
+
+<dl>
+<dt><tt>A</tt> : TA</dt>
+<dd>Input tensor A. The shape of A should be (M, K) if transA is 0, or (K, M) if transA is non-zero.</dd>
+<dt><tt>a_scale</tt> : T</dt>
+<dd>Scale of quantized input 'A'. It is a scalar,which means a per-tensor quantization.</dd>
+<dt><tt>a_zero_point</tt> : TA</dt>
+<dd>Zero point tensor for input 'A'. It is a scalar.</dd>
+<dt><tt>B</tt> : TB</dt>
+<dd>Input tensor B. The shape of B should be (K, N) if transB is 0, or (N, K) if transB is non-zero.</dd>
+<dt><tt>b_scale</tt> : T</dt>
+<dd>Scale of quantized input 'B'. It could be a scalar or a 1-D tensor, which means a per-tensor or per-column quantization. If it's a 1-D tensor, its number of elements should be equal to the number of columns of input 'B'.</dd>
+<dt><tt>b_zero_point</tt> : TB</dt>
+<dd>Zero point tensor for input 'B'. It's optional and default value is 0.  It could be a scalar or a 1-D tensor, which means a per-tensor or per-column quantization. If it's a 1-D tensor, its number of elements should be equal to the number of columns of input 'B'.</dd>
+<dt><tt>C</tt> (optional) : TC</dt>
+<dd>Optional input tensor C. If not specified, the computation is done as if C is a scalar 0. The shape of C should be unidirectional broadcastable to (M, N). Its type is int32_t and must be quantized with zero_point = 0 and scale = alpha / beta * a_scale * b_scale.</dd>
+<dt><tt>y_scale</tt> (optional) : T</dt>
+<dd>Scale of output 'Y'. It is a scalar, which means a per-tensor quantization. It is optional. The output is full precision(float32) if it is not provided. Or the output is quantized.</dd>
+<dt><tt>y_zero_point</tt> (optional) : TYZ</dt>
+<dd>Zero point tensor for output 'Y'. It is a scalar, which means a per-tensor quantization. It is optional. The output is full precision(float32) if it is not provided. Or the output is quantized.</dd>
+</dl>
+
+#### Outputs
+
+<dl>
+<dt><tt>Y</tt> : TY</dt>
+<dd>Output tensor of shape (M, N).</dd>
+</dl>
+
+#### Type Constraints
+
+<dl>
+<dt><tt>T</tt> : tensor(float)</dt>
+<dd>Constrain scale types to float tensors.</dd>
+<dt><tt>TA</tt> : tensor(uint8), tensor(int8)</dt>
+<dd>Constrain input A and its zero point types to 8 bit tensors.</dd>
+<dt><tt>TB</tt> : tensor(uint8), tensor(int8)</dt>
+<dd>Constrain input B and its zero point types to 8 bit tensors.</dd>
+<dt><tt>TC</tt> : tensor(int32)</dt>
+<dd>Constrain input C to 32 bit integer tensors.</dd>
+<dt><tt>TYZ</tt> : tensor(uint8), tensor(int8)</dt>
+<dd>Constrain output zero point types to 8 bit tensors.</dd>
+<dt><tt>TY</tt> : tensor(float), tensor(uint8), tensor(int8)</dt>
+<dd>Constrain output type to float32 or 8 bit tensors.</dd>
 </dl>
 
 

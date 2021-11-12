@@ -61,9 +61,34 @@ static const char* const kOrtSessionOptionsUseDeviceAllocatorForInitializers = "
 static const char* const kOrtSessionOptionsConfigAllowInterOpSpinning = "session.inter_op.allow_spinning";
 static const char* const kOrtSessionOptionsConfigAllowIntraOpSpinning = "session.intra_op.allow_spinning";
 
-// NNAPI EP keys begin
-// Note: These options should be specified prior to appending the NNAPI EP to the session options object in order for
-// them to take effect.
+// Key for using model bytes directly for ORT format
+// If a session is created using an input byte array contains the ORT format model data,
+// By default we will copy the model bytes at the time of session creation to ensure the model bytes
+// buffer is valid.
+// Setting this option to "1" will disable copy the model bytes, and use the model bytes directly. The caller
+// has to guarantee that the model bytes are valid until the ORT session using the model bytes is destroyed.
+static const char* const kOrtSessionOptionsConfigUseORTModelBytesDirectly = "session.use_ort_model_bytes_directly";
+
+// Save information for replaying graph optimizations later instead of applying them directly.
+//
+// When an ONNX model is loaded, ORT can perform various optimizations on the graph.
+// However, when an ORT format model is loaded, these optimizations are typically not available - this scenario must
+// be supported by minimal builds.
+// When loading an ONNX model, ORT can optionally save the effects of some optimizations for later replay in an ORT
+// format model. These are known as "runtime optimizations" - in an ORT format model, they happen at runtime.
+//
+// Note: This option is only applicable when loading an ONNX model and saving an ORT format model.
+//
+// Note: Runtime optimizations are only supported for certain optimizations at the extended level or higher.
+// Unsupported optimizations at those levels are not applied at all, while optimizations at other levels are applied
+// directly.
+//
+// "0": disabled, "1": enabled
+// The default is "0".
+static const char* const kOrtSessionOptionsConfigSaveRuntimeOptimizations = "optimization.save_runtime_optimizations";
+
+// Note: The options specific to an EP should be specified prior to appending that EP to the session options object in
+// order for them to take effect.
 
 // Specifies a list of stop op types. Nodes of a type in the stop op types and nodes downstream from them will not be
 // run by the NNAPI EP.
@@ -71,5 +96,3 @@ static const char* const kOrtSessionOptionsConfigAllowIntraOpSpinning = "session
 // If not specified, the default set of stop ops is used. To specify an empty stop ops types list and disable stop op
 // exclusion, set the value to "".
 static const char* const kOrtSessionOptionsConfigNnapiEpPartitioningStopOps = "ep.nnapi.partitioning_stop_ops";
-
-// NNAPI EP keys end

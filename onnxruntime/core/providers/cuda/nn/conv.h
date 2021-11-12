@@ -111,12 +111,14 @@ constexpr size_t MAX_CACHED_ALGO_PERF_RESULTS = 10000;
 
 template <typename AlgoPerfType>
 struct CudnnConvState {
+  cudnnHandle_t handle;
+
   // if x/w dims changed, update algo and cudnnTensors
-  std::vector<int64_t> last_x_dims;
-  std::vector<int64_t> last_w_dims;
+  TensorShape last_x_dims;
+  TensorShape last_w_dims;
 
   // these would be recomputed if x/w dims change
-  std::vector<int64_t> y_dims;
+  TensorShape y_dims;
   std::vector<int64_t> y_dims_with_adjusted_pads;
   size_t workspace_bytes;
   decltype(AlgoPerfType().algo) algo;
@@ -173,6 +175,7 @@ class Conv : public CudaKernel {
   Conv(const OpKernelInfo& info) : CudaKernel(info), conv_attrs_(info) {
     auto pads_size = conv_attrs_.pads.size();
     ORT_ENFORCE(pads_size % 2 == 0);
+    s_.handle = CudnnHandle();
   }
 
   Status ComputeInternal(OpKernelContext* context) const override;
@@ -186,13 +189,14 @@ class Conv : public CudaKernel {
   ConvAttributes conv_attrs_;
   mutable CudnnConvState<cudnnConvolutionFwdAlgoPerf_t> s_;
   constexpr static auto kDefaultConvAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
+  static const cudnnConvolutionFwdAlgo_t kAllAlgos[];
 };
 
 Status SliceOutUnwantedOutputSection(cudaStream_t stream,
                                      const void* input_data,
-                                     const std::vector<int64_t>& input_dims,
+                                     gsl::span<const int64_t> input_dims,
                                      void* output_data,
-                                     const std::vector<int64_t>& output_dims,
+                                     gsl::span<const int64_t> output_dims,
                                      std::vector<int64_t> starts,
                                      const std::vector<int64_t>& ends,
                                      const std::vector<int64_t>& axes,

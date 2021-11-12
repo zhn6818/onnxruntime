@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+'use strict';
+
 const path = require('path');
 const fs = require('fs-extra');
 const globby = require('globby');
@@ -21,21 +23,34 @@ fs.emptyDirSync(NPM_CACHE_FOLDER);
 fs.emptyDirSync(CHROME_USER_DATA_FOLDER);
 fs.copySync(TEST_E2E_SRC_FOLDER, TEST_E2E_RUN_FOLDER);
 
+// always use a new folder as user-data-dir
+let nextUserDataDirId = 0;
+function getNextUserDataDir() {
+  const dir = path.resolve(CHROME_USER_DATA_FOLDER, nextUserDataDirId.toString())
+  nextUserDataDirId++;
+  fs.emptyDirSync(dir);
+  return dir;
+}
+
 // find packed package
 
 const ORT_COMMON_FOLDER = path.resolve(JS_ROOT_FOLDER, 'common');
 const ORT_COMMON_PACKED_FILEPATH_CANDIDATES = globby.sync('onnxruntime-common-*.tgz', { cwd: ORT_COMMON_FOLDER });
-if (ORT_COMMON_PACKED_FILEPATH_CANDIDATES.length !== 1) {
-  throw new Error('cannot find exactly single package for onnxruntime-common.');
+
+const PACKAGES_TO_INSTALL = [];
+
+if (ORT_COMMON_PACKED_FILEPATH_CANDIDATES.length === 1) {
+  PACKAGES_TO_INSTALL.push(path.resolve(ORT_COMMON_FOLDER, ORT_COMMON_PACKED_FILEPATH_CANDIDATES[0]));
+} else if (ORT_COMMON_PACKED_FILEPATH_CANDIDATES.length > 1) {
+  throw new Error('multiple packages found for onnxruntime-common.');
 }
-const ORT_COMMON_PACKED_FILEPATH = path.resolve(ORT_COMMON_FOLDER, ORT_COMMON_PACKED_FILEPATH_CANDIDATES[0]);
 
 const ORT_WEB_FOLDER = path.resolve(JS_ROOT_FOLDER, 'web');
 const ORT_WEB_PACKED_FILEPATH_CANDIDATES = globby.sync('onnxruntime-web-*.tgz', { cwd: ORT_WEB_FOLDER });
 if (ORT_WEB_PACKED_FILEPATH_CANDIDATES.length !== 1) {
   throw new Error('cannot find exactly single package for onnxruntime-web.');
 }
-const ORT_WEB_PACKED_FILEPATH = path.resolve(ORT_WEB_FOLDER, ORT_WEB_PACKED_FILEPATH_CANDIDATES[0]);
+PACKAGES_TO_INSTALL.push(path.resolve(ORT_WEB_FOLDER, ORT_WEB_PACKED_FILEPATH_CANDIDATES[0]));
 
 // we start here:
 
@@ -44,7 +59,10 @@ async function main() {
   await runInShell(`npm install"`);
 
   // npm install with "--cache" to install packed packages with an empty cache folder
-  await runInShell(`npm install --cache "${NPM_CACHE_FOLDER}" "${ORT_COMMON_PACKED_FILEPATH}" "${ORT_WEB_PACKED_FILEPATH}"`);
+  await runInShell(`npm install --cache "${NPM_CACHE_FOLDER}" ${PACKAGES_TO_INSTALL.map(i => `"${i}"`).join(' ')}`);
+
+  // prepare .wasm files for path override testing
+  prepareWasmPathOverrideFiles();
 
   // test case run in Node.js
   await testAllNodejsCases();
@@ -60,23 +78,37 @@ async function main() {
   process.exit(0);
 }
 
+function prepareWasmPathOverrideFiles() {
+  const folder = path.join(TEST_E2E_RUN_FOLDER, 'test-wasm-path-override');
+  const sourceFile = path.join(TEST_E2E_RUN_FOLDER, 'node_modules', 'onnxruntime-web', 'dist', 'ort-wasm.wasm');
+  fs.emptyDirSync(folder);
+  fs.copyFileSync(sourceFile, path.join(folder, 'ort-wasm.wasm'));
+  fs.copyFileSync(sourceFile, path.join(folder, 'renamed.wasm'));
+}
+
 async function testAllNodejsCases() {
   await runInShell('node ./node_modules/mocha/bin/mocha ./node-test-main-no-threads.js');
   await runInShell('node ./node_modules/mocha/bin/mocha ./node-test-main.js');
-  await runInShell('node --experimental-wasm-threads --experimental-wasm-bulk-memory ./node_modules/mocha/bin/mocha ./node-test-main-no-threads.js');
-  await runInShell('node --experimental-wasm-threads --experimental-wasm-bulk-memory ./node_modules/mocha/bin/mocha ./node-test-main.js');
+  await runInShell('node --experimental-wasm-threads ./node_modules/mocha/bin/mocha ./node-test-main-no-threads.js');
+  await runInShell('node --experimental-wasm-threads ./node_modules/mocha/bin/mocha ./node-test-main.js');
+  await runInShell('node ./node_modules/mocha/bin/mocha ./node-test-wasm-path-override-filename.js');
+  await runInShell('node ./node_modules/mocha/bin/mocha ./node-test-wasm-path-override-prefix.js');
 }
 
 async function testAllBrowserCases({ hostInKarma }) {
   await runKarma({ hostInKarma, main: './browser-test-webgl.js', browser: 'Chrome_default' });
   await runKarma({ hostInKarma, main: './browser-test-wasm.js', browser: 'Chrome_default' });
   await runKarma({ hostInKarma, main: './browser-test-wasm-no-threads.js', browser: 'Chrome_default' });
+  await runKarma({ hostInKarma, main: './browser-test-wasm-proxy.js', browser: 'Chrome_default' });
+  await runKarma({ hostInKarma, main: './browser-test-wasm-no-threads-proxy.js', browser: 'Chrome_default' });
+  await runKarma({ hostInKarma, main: './browser-test-wasm-path-override-filename.js', browser: 'Chrome_default' });
+  await runKarma({ hostInKarma, main: './browser-test-wasm-path-override-prefix.js', browser: 'Chrome_default' });
 }
 
 async function runKarma({ hostInKarma, main, browser }) {
   const selfHostFlag = hostInKarma ? '--self-host' : '';
   await runInShell(
-    `npx karma start --single-run --browsers ${browser} ${selfHostFlag} --test-main=${main} --user-data=${CHROME_USER_DATA_FOLDER}`);
+    `npx karma start --single-run --browsers ${browser} ${selfHostFlag} --test-main=${main} --user-data=${getNextUserDataDir()}`);
 }
 
 async function runInShell(cmd) {

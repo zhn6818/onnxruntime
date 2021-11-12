@@ -23,7 +23,7 @@ bool LaunchAttentionKernel(
     cudaStream_t stream,                          // cuda stream
     const void* input,                            // Input tensor
     const int* mask_index,                        // Attention mask raw data or index (end position of each sequence, or end positions and start positions). NULL means no mask.
-    const std::vector<int64_t>* mask_index_dims,  // Mask index shape
+    gsl::span<const int64_t> mask_index_dims,     // Mask index shape
     void* output,                                 // Output tensor
     int batch_size,                               // Batch size (B)
     int sequence_length,                          // Sequence length (S)
@@ -35,6 +35,7 @@ bool LaunchAttentionKernel(
     bool is_unidirectional,                       // Whether there is unidirecitonal mask.
     int past_sequence_length,                     // Sequence length in past state
     const void* past,                             // Past state input
+    const void* extra_add_qk,                     // Additional Add
     void* present                                 // Present state output
 );
 

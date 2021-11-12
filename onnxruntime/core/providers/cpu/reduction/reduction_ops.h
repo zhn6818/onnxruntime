@@ -43,19 +43,19 @@ TensorOpCost ParallelReduceFastCost(int64_t n_row, int64_t n_col, int64_t elemen
   This only improves reduce function when reduced axes are contiguous:
   if len(shape) == 4, any single axis is ok, axes=(0, 1) or (1, 2) or (2, 3) is ok,
   axes=(0, 2) is not covered by this change, former implementation prevails.
-  In that case, the shape can be compressed into three cases: 
+  In that case, the shape can be compressed into three cases:
   (K = axis not reduced, R = reduced axis):
 
   *  KR - reduction on the last dimensions
   *  RK - reduction on the first dimensions
   *  KRK - reduction on the middle dimensions.
-   
+
   For these three configuration, the reduction may be optimized
   with vectors operations. Method WhichFastReduce() returns which case
   case be optimized for which aggregator.
 */
-FastReduceKind OptimizeShapeForFastReduce(const std::vector<int64_t>& input_shape,
-                                          const std::vector<int64_t>& reduced_axes,
+FastReduceKind OptimizeShapeForFastReduce(gsl::span<const int64_t> input_shape,
+                                          gsl::span<const int64_t> reduced_axes,
                                           std::vector<int64_t>& fast_shape,
                                           std::vector<int64_t>& fast_output_shape,
                                           std::vector<int64_t>& fast_axes,
@@ -79,7 +79,7 @@ class ResultsNoTransposePrepareForReduce {
     last_loop_inc = 0;
   }
 
-  bool equal(const std::vector<int64_t>& local_input_shape, const std::vector<int64_t>& local_reduced_axes);
+  bool equal(gsl::span<const int64_t> local_input_shape, gsl::span<const int64_t> local_reduced_axes);
   void ValidateNotEmpty();
 };
 
@@ -598,13 +598,13 @@ void NoTransposePrepareForReduce(const TensorShape& new_input_shape,
 
 template <typename AGG>
 void NoTransposeReduce1Loop(Tensor* output, const TensorShape& new_input_shape, const Tensor& input,
-                            const std::vector<int64_t>& reduced_axes, concurrency::ThreadPool* tp,
+                            gsl::span<const int64_t> reduced_axes, concurrency::ThreadPool* tp,
                             ResultsNoTransposePrepareForReduce& last_results);
 
 // Specific case for ReduceLogSumExp.
 template <typename AGG>
 void NoTransposeReduce2Loops(Tensor* output, const TensorShape& new_input_shape, const Tensor& input,
-                             const std::vector<int64_t>& reduced_axes, concurrency::ThreadPool* tp,
+                             gsl::span<const int64_t> reduced_axes, concurrency::ThreadPool* tp,
                              ResultsNoTransposePrepareForReduce& last_results);
 
 template <typename AGG>
@@ -630,7 +630,7 @@ class ReduceKernelBase {
     }
     int64_t keepdims = 1;
     if (keepdims_override.has_value()) {
-      keepdims = keepdims_override.value();
+      keepdims = *keepdims_override;
     } else {
       ORT_ENFORCE(info.GetAttr("keepdims", &keepdims).IsOK());
     }
@@ -735,7 +735,7 @@ class ReduceSum final : public ReduceKernel<true> {
 
   // For external calls requiring ReduceSum implementation - will return the reduced output.
   //`input_shape_override` overrides the shape of `input` for compute purposes.
-  static std::unique_ptr<Tensor> Impl(const Tensor& input, const std::vector<int64_t>& reduce_axes,
+  static std::unique_ptr<Tensor> Impl(const Tensor& input, gsl::span<const int64_t> reduce_axes,
                                       AllocatorPtr allocator, concurrency::ThreadPool* tp, bool keep_dims,
                                       const TensorShape* input_shape_override = nullptr);
 };

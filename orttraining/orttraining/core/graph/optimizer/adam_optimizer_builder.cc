@@ -4,7 +4,7 @@
 #include "orttraining/core/graph/optimizer/adam_optimizer_builder.h"
 #include "orttraining/core/graph/graph_augmenter.h"
 #include "core/util/math.h"
-#include "core/framework/ml_value.h"
+#include "core/framework/ort_value.h"
 #include "core/framework/tensorprotoutils.h"
 
 namespace onnxruntime {
@@ -132,7 +132,7 @@ Status AdamOptimizerBuilder::Build(
         output_args.push_back(ArgDef());
       }
       if (!opt_configs[i].loss_scale_input_name.empty()) {
-        input_args.emplace_back(ArgDef(opt_configs[i].loss_scale_input_name, graph_defs.CreateTypeProto({1}, ONNX_NAMESPACE::TensorProto_DataType_FLOAT)));
+        input_args.emplace_back(ArgDef(opt_configs[i].loss_scale_input_name, graph_defs.CreateTypeProto(std::array<const int64_t, 1>{1}, ONNX_NAMESPACE::TensorProto_DataType_FLOAT)));
       } else {
         input_args.emplace_back(ArgDef());
       }

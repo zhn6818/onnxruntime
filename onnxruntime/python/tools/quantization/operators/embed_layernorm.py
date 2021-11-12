@@ -1,4 +1,5 @@
 import onnx
+import logging
 from .base_operator import QuantOperatorBase
 from ..quant_utils import attribute_to_kwarg, ms_domain
 from onnx import onnx_pb as onnx_proto
@@ -17,6 +18,10 @@ class EmbedLayerNormalizationQuant(QuantOperatorBase):
         node = self.node
         assert (node.op_type == "EmbedLayerNormalization")
 
+        if len(node.output) > 2:
+            logging.info(f"Quantization is not applied to {node.name} since it has 3 outputs")
+            return super().quantize()
+
         '''
         Pre-quantization EmbedLayerNorm inputs:
         [0] input_ids (int32)
@@ -30,6 +35,8 @@ class EmbedLayerNormalizationQuant(QuantOperatorBase):
         '''
         (quantized_input_names, zero_point_names, scale_names, nodes) = \
             self.quantizer.quantize_inputs(node, [2, 3, 4, 5, 6])
+        if quantized_input_names is None:
+            return super().quantize()
 
         qembed_layer_norm_name = "" if node.name == "" else node.name + "_quant"
 

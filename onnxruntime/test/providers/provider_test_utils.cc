@@ -117,13 +117,13 @@ struct TensorCheck<uint8_t> {
     // For any other EPs, we still expect an exact match for the results
     if (provider_type == kNnapiExecutionProvider && (has_abs_err || has_rel_err)) {
       double threshold = has_abs_err
-                             ? params.absolute_error_.value()
+                             ? *(params.absolute_error_)
                              : 0.0;
 
       for (int i = 0; i < size; ++i) {
         if (has_rel_err) {
           EXPECT_NEAR(expected[i], output[i],
-                      params.relative_error_.value() * expected[i])  // expected[i] is unsigned, can't be negative
+                      *(params.relative_error_) * expected[i])  // expected[i] is unsigned, can't be negative
               << "i:" << i << ", provider_type: " << provider_type;
         } else {  // has_abs_err
           EXPECT_NEAR(expected[i], output[i], threshold)
@@ -184,12 +184,12 @@ struct TensorCheck<double> {
         } else {
           if (has_abs_err) {
             ASSERT_NEAR(expected[i], output[i],
-                        params.absolute_error_.value())
+                        *(params.absolute_error_))
                 << "i:" << i << ", provider_type: " << provider_type;
           }
           if (has_rel_err) {
             ASSERT_NEAR(expected[i], output[i],
-                        params.relative_error_.value() *
+                        *(params.relative_error_) *
                             std::abs(expected[i]))
                 << "i:" << i << ", provider_type: " << provider_type;
           }
@@ -243,12 +243,12 @@ void InternalNumericalCheck(const Tensor& expected_tensor,
       } else {
         if (has_abs_err) {
           ASSERT_NEAR(expected[i], output[i],
-                      params.absolute_error_.value())
+                      *(params.absolute_error_))
               << "i:" << i << ", provider_type: " << provider_type;
         }
         if (has_rel_err) {
           ASSERT_NEAR(expected[i], output[i],
-                      params.relative_error_.value() *
+                      *(params.relative_error_) *
                           std::abs(expected[i]))
               << "i:" << i << ", provider_type: " << provider_type;
         }
@@ -465,20 +465,18 @@ void OpTester::FillFeedsAndOutputNames(
       output_names.push_back(output.def_.Name());
   }
 
-  for (size_t i = 0; i < input_data_.size(); ++i) {
-    if (std::find(initializer_index_.begin(), initializer_index_.end(), i) ==
-            initializer_index_.end() &&
-        input_data_[i].def_.Exists()) {
-      feeds[input_data_[i].def_.Name()] = input_data_[i].data_;
-    }
-  }
+  FillFeeds(feeds);
 }
 
 void OpTester::FillFeeds(std::unordered_map<std::string, OrtValue>& feeds) {
   for (size_t i = 0; i < input_data_.size(); ++i) {
     if (std::find(initializer_index_.begin(), initializer_index_.end(), i) ==
             initializer_index_.end() &&
-        input_data_[i].def_.Exists()) {
+        input_data_[i].def_.Exists() &&
+        // We don't include optional type OrtValues of None because this is
+        // how we expect users to deal with sending through "None"s as graph inputs
+        // (i.e.) don't send them through at all
+        input_data_[i].data_.IsAllocated()) {
       feeds[input_data_[i].def_.Name()] = input_data_[i].data_;
     }
   }
@@ -516,8 +514,8 @@ void OpTester::AddNodes(
     add_attribute_fn(node);
 }
 
-std::vector<int64_t> OpTester::GetDimsForProto(const std::vector<int64_t>& dims) {
-  std::vector<int64_t> dims_for_proto{dims};
+std::vector<int64_t> OpTester::GetDimsForProto(gsl::span<const int64_t> dims) {
+  std::vector<int64_t> dims_for_proto{dims.begin(), dims.end()};
   if (add_symbolic_dim_to_tensor_data_ >= 0 &&
       dims.size() > static_cast<size_t>(add_symbolic_dim_to_tensor_data_)) {
     dims_for_proto[add_symbolic_dim_to_tensor_data_] = -1;
@@ -525,7 +523,7 @@ std::vector<int64_t> OpTester::GetDimsForProto(const std::vector<int64_t>& dims)
   return dims_for_proto;
 }
 
-void OpTester::AddShapeToTensorData(NodeArg& node_arg, const std::vector<int64_t>& dims,
+void OpTester::AddShapeToTensorData(NodeArg& node_arg, gsl::span<const int64_t> dims,
                                     const std::vector<std::string>* dim_params) {
   if (dim_params && !(dim_params->empty()) && add_shape_to_tensor_data_) {
     // If dim_params presents, configure node_arg's dim value based on dim_params, which supports symbolic dim and dim broadcast.
@@ -548,6 +546,7 @@ void OpTester::AddShapeToTensorData(NodeArg& node_arg, const std::vector<int64_t
   }
 }
 
+#if !defined(DISABLE_SPARSE_TENSORS)
 static std::unique_ptr<SparseTensor> MakeSparseTensor(MLDataType data_type, const std::vector<int64_t>& dims) {
   TensorShape shape{dims};
   auto allocator = test::AllocatorManager::Instance().GetAllocator(CPU);
@@ -673,7 +672,7 @@ void OpTester::AddSparseCsrTensorStrings(std::vector<Data>& data,
   NodeArg node_arg = MakeSparseNodeArg(dtype, name, dims, dim_params);
   AddSparseTensorData(data, std::move(node_arg), std::move(p_tensor), CheckParams());
 }
-
+#endif  // !defined(DISABLE_SPARSE_TENSORS)
 
 void OpTester::AddInitializers(onnxruntime::Graph& graph) {
   for (auto index : initializer_index_) {
@@ -706,7 +705,8 @@ void OpTester::AddInitializers(onnxruntime::Graph& graph) {
 }
 
 std::unique_ptr<onnxruntime::Model> OpTester::BuildGraph(
-    const std::unordered_map<std::string, int>& extra_domain_to_version) {
+    const std::unordered_map<std::string, int>& extra_domain_to_version,
+    bool allow_released_onnx_opset_only) {
   // Generate the input & output def lists
   std::vector<onnxruntime::NodeArg*> node_input_defs;
   std::vector<onnxruntime::NodeArg*> output_defs;
@@ -736,7 +736,7 @@ std::unique_ptr<onnxruntime::Model> OpTester::BuildGraph(
   auto p_model = std::make_unique<onnxruntime::Model>(
       "test", false, ModelMetaData(), PathString(), custom_schema_registries_,
       domain_to_version, std::vector<ONNX_NAMESPACE::FunctionProto>{},
-      DefaultLoggingManager().DefaultLogger());
+      DefaultLoggingManager().DefaultLogger(), allow_released_onnx_opset_only);
   onnxruntime::Graph& graph = p_model->MainGraph();
   AddNodes(graph, node_input_defs, output_defs, add_attribute_funcs_);
 
@@ -751,7 +751,7 @@ std::vector<OrtValue> OpTester::ExecuteModel(
     const std::string& expected_failure_string, const RunOptions* run_options,
     const std::unordered_map<std::string, OrtValue>& feeds,
     const std::vector<std::string>& output_names,
-    const std::string& provider_type) {
+    const std::string& provider_type, bool allow_released_onnx_opset_only) {
   std::string s1;
   const bool rc = model.ToProto().SerializeToString(&s1);
   if (!rc) {
@@ -759,7 +759,7 @@ std::vector<OrtValue> OpTester::ExecuteModel(
     return {};
   }
   std::stringstream sstr(s1);
-  auto status = session_object.Load(sstr);
+  auto status = session_object.Load(sstr, allow_released_onnx_opset_only);
   EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
   if (!status.IsOK()) {
     LOGS_DEFAULT(ERROR) << "Load failed with status: " << status.ErrorMessage();
@@ -836,8 +836,19 @@ std::vector<OrtValue> OpTester::ExecuteModel(
           ort_value.Fence()->BeforeUsingAsInput(
               onnxruntime::kCpuExecutionProvider, 0);
 
-        if (expected_data.def_.Exists()) {  // optional outputs won't exist
-          if (expected_data.data_.IsTensor()) {
+        if (expected_data.def_.Exists()) {           // optional edges won't exist (so skip them)
+          if (!expected_data.data_.IsAllocated()) {  // optional type output (None)
+            EXPECT_TRUE(!ort_value.IsAllocated())
+                << "Expected to see an output of None "
+                << "but instead got an output that wasn't None";
+
+            // Make sure types align
+            EXPECT_EQ(expected_data.data_.Type(), ort_value.Type())
+                << "Expected optional type: " << expected_data.data_.Type()
+                << " but instead got optional type: " << ort_value.Type();
+          }
+
+          else if (expected_data.data_.IsTensor()) {
             // verify output shape inference when input defs have shape
             if (add_shape_to_tensor_data_) {
               auto out_shape_proto = expected_data.def_.Shape();
@@ -851,15 +862,18 @@ std::vector<OrtValue> OpTester::ExecuteModel(
                           expected_shape.NumDimensions());
               for (size_t d = 0; d < inferred_dims.size(); ++d) {
                 // check equal unless the input involved a symbolic dimension
-                if (inferred_dims[d] != -1)
+                if (inferred_dims[d] != -1) {
                   EXPECT_EQ(expected_shape[d], inferred_dims[d])
                       << "Output idx = " << idx << " dim = " << d;
+                }
               }
             }
+
             Check(expected_data, ort_value.Get<Tensor>(), provider_type);
           } else {
             Check(expected_data, ort_value, provider_type);
           }
+
           ++idx;
 
           // skip missing trailing optional outputs
@@ -913,8 +927,13 @@ void OpTester::Run(
     run_called_ = true;
 #endif
 
-    static bool allow_released_onnx_opset_only =
-        model_load_utils::IsAllowReleasedONNXOpsetsOnlySet();
+    // IsAllowReleasedONNXOpsetsOnlySet() checks for the appropriate env var in the process (i.e.) process-wide
+    // `IsAllowReleasedONNXOpsetsOnlySetForThisTest()` is for this specific OpTester instance
+    // We will only support released opsets iff IsAllowReleasedONNXOpsetsOnlySet() and `IsAllowReleasedONNXOpsetsOnlySetForThisTest()`
+    // are both true
+    auto allow_released_onnx_opset_only =
+        IsAllowReleasedONNXOpsetsOnlySetForThisTest() && model_load_utils::IsAllowReleasedONNXOpsetsOnlySet();
+
     if (allow_released_onnx_opset_only) {
       auto& onnx_released_versions =
           ONNX_NAMESPACE::OpSchemaRegistry::DomainToVersionRange::Instance().LastReleaseVersionMap();
@@ -930,7 +949,7 @@ void OpTester::Run(
 
     fetches_.clear();
     bool cache_enabled = cached_model_ != nullptr;
-    auto p_model = !cache_enabled ? BuildGraph() : cached_model_;
+    auto p_model = !cache_enabled ? BuildGraph({}, allow_released_onnx_opset_only) : cached_model_;
     auto& graph = p_model->MainGraph();
 
     Status status = Status::OK();
@@ -1001,7 +1020,7 @@ void OpTester::Run(
       InferenceSession session_object{so, GetEnvironment()};
 
       if (add_prepacked_shared_container_to_sessions_) {
-        session_object.AddPrePackedWeightsContainer(&prepacked_weights_container_);
+        ASSERT_STATUS_OK(session_object.AddPrePackedWeightsContainer(&prepacked_weights_container_));
       }
 
       ASSERT_TRUE(!execution_providers->empty())
@@ -1015,7 +1034,7 @@ void OpTester::Run(
 
       fetches_ = ExecuteModel<InferenceSession>(
           *p_model, session_object, expect_result, expected_failure_string,
-          run_options, feeds, output_names, provider_types);
+          run_options, feeds, output_names, provider_types, allow_released_onnx_opset_only);
 
       // After the model has initialized (happens in ExecuteModel),
       // we should be able to tell how many constant initializers were pre-packed
@@ -1046,7 +1065,7 @@ void OpTester::Run(
         InferenceSession session_object{so, GetEnvironment()};
 
         if (add_prepacked_shared_container_to_sessions_) {
-          session_object.AddPrePackedWeightsContainer(&prepacked_weights_container_);
+          ASSERT_STATUS_OK(session_object.AddPrePackedWeightsContainer(&prepacked_weights_container_));
         }
 
         for (auto& custom_session_registry : custom_session_registries_)
@@ -1094,7 +1113,8 @@ void OpTester::Run(
               provider_type == onnxruntime::kTensorrtExecutionProvider ||
               provider_type == onnxruntime::kNupharExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider ||
-              provider_type == onnxruntime::kCoreMLExecutionProvider)
+              provider_type == onnxruntime::kCoreMLExecutionProvider ||
+              provider_type == onnxruntime::kDnnlExecutionProvider)
             continue;
           auto reg = execution_provider->GetKernelRegistry();
           if (!KernelRegistry::HasImplementationOf(*reg, node, execution_provider->Type())) {
@@ -1124,7 +1144,7 @@ void OpTester::Run(
         ASSERT_PROVIDER_STATUS_OK(session_object.RegisterExecutionProvider(std::move(execution_provider)));
         fetches_ = ExecuteModel<InferenceSession>(
             *p_model, session_object, expect_result, expected_failure_string,
-            run_options, feeds, output_names, provider_type);
+            run_options, feeds, output_names, provider_type, allow_released_onnx_opset_only);
 
         // After the model has initialized (happens in ExecuteModel),
         // we should be able to tell how many constant initializers were pre-packed
@@ -1218,7 +1238,8 @@ template std::vector<OrtValue> OpTester::ExecuteModel<training::TrainingSession>
     ExpectResult expect_result, const std::string& expected_failure_string,
     const RunOptions* run_options,
     const std::unordered_map<std::string, OrtValue>& feeds,
-    const std::vector<std::string>& output_names, const std::string& provider_type);
+    const std::vector<std::string>& output_names, const std::string& provider_type,
+    bool allow_released_onnx_opset_only);
 #endif
 
 }  // namespace test

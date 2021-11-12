@@ -23,6 +23,7 @@ using onnxruntime::Status;
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-result"
 #endif
 #include <unsupported/Eigen/CXX11/ThreadPool>
 #if defined(__GNUC__)
@@ -105,7 +106,7 @@ Status PerformanceRunner::Run() {
   }
 
   // warm up
-  RunOneIteration<true>();
+  ORT_RETURN_IF_ERROR(RunOneIteration<true>());
 
   // TODO: start profiling
   // if (!performance_test_config_.run_config.profile_file.empty())
@@ -239,11 +240,9 @@ static std::unique_ptr<TestModelInfo> CreateModelInfo(const PerformanceTestConfi
     }
 #endif
 
-#if defined(ENABLE_ORT_FORMAT_LOAD)
     if (HasExtensionOf(file_path, ORT_TSTR("ort"))) {
       return TestModelInfo::LoadOrtModel(performance_test_config_.model_info.model_file_path.c_str());
     }
-#endif
 
     ORT_NOT_IMPLEMENTED(ToMBString(file_path), " is not supported");
   }
