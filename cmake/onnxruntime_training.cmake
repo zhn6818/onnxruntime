@@ -88,7 +88,8 @@ if (onnxruntime_BUILD_UNIT_TESTS)
 
   if (onnxruntime_USE_ROCM)
     add_definitions(-DUSE_ROCM=1)
-    target_include_directories(onnxruntime_training_runner PUBLIC ${onnxruntime_ROCM_HOME}/include)
+    message(STATUS "Adding ${onnxruntime_ROCM_HOME}/include/roctracer to onnxruntime_training_runner")
+    target_include_directories(onnxruntime_training_runner PUBLIC ${onnxruntime_ROCM_HOME}/include ${onnxruntime_ROCM_HOME}/include/roctracer)
   endif()
 
   check_cxx_compiler_flag(-Wno-maybe-uninitialized HAS_NO_MAYBE_UNINITIALIZED)

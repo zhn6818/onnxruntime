@@ -126,6 +126,8 @@ provider_excluded_files = [
                 'cuda_call.cc',
                 'cuda_common.cc',
                 'cuda_common.h',
+                'cuda_profiler.cc',
+                'cuda_profiler.h',
                 'cuda_execution_provider_info.cc',
                 'cuda_execution_provider_info.h',
                 'cuda_execution_provider.cc',
