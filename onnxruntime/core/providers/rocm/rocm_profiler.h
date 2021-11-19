@@ -42,7 +42,7 @@ class RocmProfiler final : public EpProfiler {
   static void ApiCallback(uint32_t domain, uint32_t cid, const void* callback_data, void* arg);
   static void OpsCallback(const char* begin, const char* end, void* arg);
  
-  struct KernelExecutionDesc {
+  struct KernelStat {
     std::string name_ = {};
     uint32_t stream_ = 0;
     int32_t grid_x_ = 0;
@@ -55,7 +55,24 @@ class RocmProfiler final : public EpProfiler {
     int64_t stop_ = 0;
     uint32_t correlation_id = 0;
   };
+
+  struct ApiCallDesc {
+
+    uint64_t correlation_id = 0;
+    std::string kernel_name_ = {};
+    uint32_t stream_ = 0;
+  };
+
+  struct OpExecDesc {
+    uint64_t correlation_id = 0;
+    uint64_t external_id = 0;
+    uint64_t start_ = 0;
+    uint64_t stop_ = 0; 
+  };
+
   static std::atomic_flag enabled;
+  static std::vector<ApiCallDesc> api_trace_;
+  static std::vector<OpExecDesc> op_trace_;
 
   roctracer_pool_t *hccPool;
 

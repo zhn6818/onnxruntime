@@ -14,6 +14,8 @@ namespace profiling {
   } while (0)
 
 std::atomic_flag RocmProfiler::enabled{0};
+std::vector<RocmProfiler::ApiCallDesc> RocmProfiler::api_trace_;
+std::vector<RocmProfiler::OpExecDesc> RocmProfiler::op_trace_;
 
 void RocmProfiler::ApiCallback(uint32_t domain, uint32_t cid, const void* callback_data, void* arg) {
 
@@ -29,17 +31,11 @@ void RocmProfiler::ApiCallback(uint32_t domain, uint32_t cid, const void* callba
             data->args.hipLaunchKernel.function_address, 
             data->args.hipLaunchKernel.stream));
 	  printf("tracing %s\n", name.c_str());
+	  printf("api_trace_.size() = %lu\n", api_trace_.size());
 	  fflush(stdout);
 
-          /* data->correlation_id;
-          data->args.hipLaunchKernel.blockDimX;
-          data->args.hipLaunchKernel.blockDimY;
-          data->args.hipLaunchKernel.blockDimZ;
-          data->args.hipLaunchKernel.gridDimX;
-          data->args.hipLaunchKernel.gridDimY;
-          data->args.hipLaunchKernel.gridDimZ; */
-
-          // push to queue to push to db (api table with cid primary key)
+	  ApiCallDesc desc = {data->correlation_id, name, 0};
+	  api_trace_.push_back(desc);
         } 
         break;
 
@@ -50,10 +46,12 @@ void RocmProfiler::ApiCallback(uint32_t domain, uint32_t cid, const void* callba
           const hipFunction_t f = data->args.hipModuleLaunchKernel.f;
           if (f != nullptr) {
               std::string name(hipKernelNameRef(f));
-              // data->correlation_id;
-
    	      printf("tracing %s\n", name.c_str());
+	      printf("api_trace_.size() = %lu\n", api_trace_.size());
 	      fflush(stdout);
+
+	      ApiCallDesc desc = {data->correlation_id, name, 0};
+	      api_trace_.push_back(desc);
           } 
 
           // push to queue to push to db (api table with cid primary key)
@@ -67,6 +65,21 @@ void RocmProfiler::OpsCallback(const char* begin, const char* end, void* arg) {
 
   // capture correlation_id and kernel begin/end and external id
   // push to queue to push to db (ops table with cid primary key)
+
+  const roctracer_record_t* record = (const roctracer_record_t*)(begin);
+  const roctracer_record_t* end_record = (const roctracer_record_t*)(end);
+
+  while (record < end_record) {
+      const char *name = roctracer_op_string(record->domain, record->op, record->kind);
+
+      printf("op callback %s\n", name);
+      fflush(stdout);
+
+      OpExecDesc desc = { record->correlation_id, record->external_id, record->begin_ns, record->end_ns };
+      op_trace_.push_back(desc);
+
+      roctracer_next_record(record, &record);
+  }
 }
 
 bool RocmProfiler::StartProfiling() {
@@ -96,6 +109,7 @@ bool RocmProfiler::StartProfiling() {
       hcc_cb_properties.buffer_size = 0x40000;
       hcc_cb_properties.buffer_callback_fun = OpsCallback;
       ROCT_OK(roctracer_open_pool_expl(&hcc_cb_properties, &hccPool));
+      ROCT_OK(roctracer_enable_domain_activity_expl(ACTIVITY_DOMAIN_HCC_OPS, hccPool));
   
       roctracer_start();
       initialized_ = true;
@@ -103,6 +117,7 @@ bool RocmProfiler::StartProfiling() {
     }
     catch(const OnnxRuntimeException& ex) {
       // LOGS_DEFAULT(WARNING) << ex.what();
+      std::cout << ex.what();
       DisableEvents();
       enabled.clear();
       return false;
