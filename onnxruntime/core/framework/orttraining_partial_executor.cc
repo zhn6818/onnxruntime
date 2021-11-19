@@ -136,6 +136,7 @@ Status PartialExecutor::Execute(const SessionState& session_state, const std::ve
                                 const std::unordered_map<size_t, CustomAllocator>& fetch_allocators,
                                 const logging::Logger& logger) {
   const bool is_profiler_enabled = session_state.Profiler().IsEnabled();
+  // std::cout << "is_profiler_enabled: " << is_profiler_enabled << std::endl;
   TimePoint tp;
   TimePoint sync_time_begin;
   TimePoint kernel_begin_time;

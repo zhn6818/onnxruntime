@@ -214,6 +214,11 @@ ROCMExecutionProvider::~ROCMExecutionProvider() {
   }
 }
 
+std::unique_ptr<profiling::EpProfiler> ROCMExecutionProvider::GetProfiler() {
+  std::cout << "Returning ROCm profiler" << std::endl;
+  return std::make_unique<profiling::RocmProfiler>();
+}
+
 ROCMExecutionProvider::PerThreadContext& ROCMExecutionProvider::GetPerThreadContext() const {
   const auto& per_thread_context_cache = PerThreadContextCache();
 

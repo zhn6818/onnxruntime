@@ -355,9 +355,10 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
   }
 
   session_profiler_.Initialize(session_logger_);
-  if (session_options_.enable_profiling) {
+  // if (session_options_.enable_profiling) {
+    std::cout << "Starting profiling" << std::endl;
     StartProfiling(session_options_.profile_file_prefix);
-  }
+  // }
 
   telemetry_ = {};
   allocator_manager_ = std::make_shared<onnxruntime::AllocatorManager>();

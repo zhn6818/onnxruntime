@@ -5,8 +5,6 @@
 #include <string>
 #include <iostream>
 
-#include "core/common/logging/logging.h"
-
 namespace onnxruntime {
 namespace profiling {
 
@@ -104,7 +102,7 @@ bool RocmProfiler::StartProfiling() {
       return true;
     }
     catch(const OnnxRuntimeException& ex) {
-      LOGS_DEFAULT(WARNING) << ex.what();
+      // LOGS_DEFAULT(WARNING) << ex.what();
       DisableEvents();
       enabled.clear();
       return false;
