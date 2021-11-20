@@ -70,9 +70,7 @@ void RocmProfiler::OpsCallback(const char* begin, const char* end, void* arg) {
   const roctracer_record_t* end_record = (const roctracer_record_t*)(end);
 
   while (record < end_record) {
-      const char *name = roctracer_op_string(record->domain, record->op, record->kind);
-
-      printf("op callback %s\n", name);
+      printf("op callback %lu %lu %lu %lu \n", record->correlation_id, record->external_id, record->begin_ns, record->end_ns);
       fflush(stdout);
 
       OpExecDesc desc = { record->correlation_id, record->external_id, record->begin_ns, record->end_ns };
