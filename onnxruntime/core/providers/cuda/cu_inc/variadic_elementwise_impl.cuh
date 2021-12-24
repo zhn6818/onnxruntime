@@ -57,6 +57,40 @@ __global__ void VariadicElementWiseNoBroadcastInputBatchKernel(
   }
 }
 
+template <typename T, typename Func, int32_t max_input_batch_size, int32_t num_elements_per_thread>
+__global__ void VectorizedVariadicElementWiseNoBroadcastInputBatchKernel(Func func, CUDA_LONG N,
+                                                                         TArray<const T*, max_input_batch_size> inputs,
+                                                                         T* output) {
+  CUDA_LONG id = (blockDim.x * blockIdx.x + threadIdx.x) * num_elements_per_thread;
+  if (id >= N) return;
+  using LoadT = aligned_vector<T, num_elements_per_thread>;
+
+  // Vectorized load into storage.
+  T input_vec[max_input_batch_size][num_elements_per_thread];
+#pragma unroll
+  for (int input_batch_idx = 0; input_batch_idx < max_input_batch_size; ++input_batch_idx) {
+    if (input_batch_idx < inputs.Size()) {
+      LoadT* input_value = reinterpret_cast<LoadT*>(input_vec[input_batch_idx]);
+      *input_value = *reinterpret_cast<const LoadT*>(&inputs[input_batch_idx][id]);
+    }
+  }
+
+  T results[num_elements_per_thread];
+#pragma unroll
+  for (int i = 0; i < num_elements_per_thread; ++i) {
+    results[i] = func(input_vec[0][i], input_vec[1][i]);
+#pragma unroll
+    for (int input_batch_idx = 2; input_batch_idx < max_input_batch_size; ++input_batch_idx) {
+      if (input_batch_idx < inputs.Size()) {
+        results[i] = func(results[i], input_vec[input_batch_idx][i]);
+      }
+    }
+  }
+
+  // Vectorized writes.
+  *(reinterpret_cast<LoadT*>(&output[id])) = *reinterpret_cast<LoadT*>(&results[0]);
+}
+
 // assumptions:
 // - inputs.Size() > 1 && inputs.Size() <= max_input_batch_size
 // - inputs and output have N elements
@@ -70,8 +104,13 @@ void VariadicElementWiseNoBroadcastInputBatchImpl(
   constexpr int32_t elements_per_thread = GridDim::maxElementsPerThread;
   constexpr int32_t threads_per_block = GridDim::maxThreadsPerBlock;
   const int32_t blocks_per_grid = static_cast<int32_t>(CeilDiv(N, elements_per_thread * threads_per_block));
-  VariadicElementWiseNoBroadcastInputBatchKernel<T, Func, max_input_batch_size, elements_per_thread>
-      <<<blocks_per_grid, threads_per_block, 0, stream>>>(func, N, inputs, output);
+  if (N % elements_per_thread == 0) {
+    VectorizedVariadicElementWiseNoBroadcastInputBatchKernel<T, Func, max_input_batch_size, elements_per_thread>
+        <<<blocks_per_grid, threads_per_block, 0, stream>>>(func, static_cast<CUDA_LONG>(N), inputs, output);
+  } else {
+    VariadicElementWiseNoBroadcastInputBatchKernel<T, Func, max_input_batch_size, elements_per_thread>
+        <<<blocks_per_grid, threads_per_block, 0, stream>>>(func, N, inputs, output);
+  }
 }
 
 }  // namespace cuda

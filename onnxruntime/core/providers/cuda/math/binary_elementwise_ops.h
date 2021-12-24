@@ -72,35 +72,60 @@ struct BinaryElementwisePreparation {
       }
     }
 
-    output_rank_or_simple_broadcast = out_rank;
+    std::vector<int64_t> out_shape_vec = output_shape.GetDimsAsVector();
+    std::vector<int64_t> lhs_shape_vec(static_cast<size_t>(out_rank), 1);
+    std::vector<int64_t> rhs_shape_vec(static_cast<size_t>(out_rank), 1);
+    int lhs_offset = out_rank - lhs_rank;
+    int rhs_offset = out_rank - rhs_rank;
+    for (int i = 0; i < lhs_rank; ++i) {
+      lhs_shape_vec[i + lhs_offset] = lhs_shape[i];
+    }
+    for (int i = 0; i < rhs_rank; ++i) {
+      rhs_shape_vec[i + rhs_offset] = rhs_shape[i];
+    }
+
+    int prev_dim = 0;
+    for (int dim = 1; dim < out_rank; ++dim) {
+      if (lhs_shape_vec[prev_dim] == out_shape_vec[prev_dim] && rhs_shape_vec[prev_dim] == out_shape_vec[prev_dim] &&
+          lhs_shape_vec[dim] == out_shape_vec[dim] && rhs_shape_vec[dim] == out_shape_vec[dim]) {
+        lhs_shape_vec[prev_dim] *= lhs_shape_vec[dim];
+        rhs_shape_vec[prev_dim] *= rhs_shape_vec[dim];
+        out_shape_vec[prev_dim] *= out_shape_vec[dim];
+      } else {
+        ++prev_dim;
+        if (prev_dim != dim) {
+          lhs_shape_vec[prev_dim] = lhs_shape_vec[dim];
+          rhs_shape_vec[prev_dim] = rhs_shape_vec[dim];
+          out_shape_vec[prev_dim] = out_shape_vec[dim];
+        }
+      }
+    }
+
+    int new_rank = prev_dim + 1;
+    lhs_shape_vec.resize(new_rank);
+    rhs_shape_vec.resize(new_rank);
+    out_shape_vec.resize(new_rank);
+    output_rank_or_simple_broadcast = new_rank;
 
     if (lhs_shape != output_shape) {
-      TensorPitches original_lhs_padded_strides(lhs_shape.GetDims(), out_rank);
-      lhs_padded_strides.SetSize(out_rank);
-      auto offset = out_rank - lhs_rank;
-      for (auto i = offset; i < out_rank; ++i) {
-        // the stride for broadcast dimension is kept as 0
-        if (lhs_shape.GetDims()[i - offset] != 1) {
-          lhs_padded_strides[i] = original_lhs_padded_strides[i];
-        }
+      TensorPitches original_lhs_padded_strides(lhs_shape_vec);
+      lhs_padded_strides.SetSize(new_rank);
+      for (int i = 0; i < new_rank; ++i) {
+        lhs_padded_strides[i] = lhs_shape_vec[i] == out_shape_vec[i] ? original_lhs_padded_strides[i] : 0;
       }
     }
 
     if (rhs_shape != output_shape) {
-      TensorPitches original_rhs_padded_strides(rhs_shape.GetDims(), out_rank);
-      rhs_padded_strides.SetSize(out_rank);
-      auto offset = out_rank - rhs_rank;
-      for (auto i = offset; i < out_rank; ++i) {
-        // the stride for broadcast dimension is kept as 0
-        if (rhs_shape.GetDims()[i - offset] != 1) {
-          rhs_padded_strides[i] = original_rhs_padded_strides[i];
-        }
+      TensorPitches original_rhs_padded_strides(rhs_shape_vec);
+      rhs_padded_strides.SetSize(new_rank);
+      for (int i = 0; i < new_rank; ++i) {
+        rhs_padded_strides[i] = rhs_shape_vec[i] == out_shape_vec[i] ? original_rhs_padded_strides[i] : 0;
       }
     }
 
-    TensorPitches original_output_strides(output_shape.GetDims());
-    fdm_output_strides.SetSize(out_rank);
-    for (auto i = 0; i < out_rank; ++i) {
+    TensorPitches original_output_strides(out_shape_vec);
+    fdm_output_strides.SetSize(new_rank);
+    for (int i = 0; i < new_rank; ++i) {
       fdm_output_strides[i] = fast_divmod(gsl::narrow_cast<int>(original_output_strides[i]));
     }
 

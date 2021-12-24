@@ -102,6 +102,33 @@ __global__ void _BinaryElementWiseSimple(
   }
 }
 
+template <typename T, typename T1, typename T2, typename FuncT, int NumElementsPerThread>
+__global__ void _VectorizedBinaryElementWiseSimple(const T1* lhs_data, const T2* rhs_data, T* output_data,
+                                                   const FuncT& functor, CUDA_LONG N) {
+  CUDA_LONG id = (blockDim.x * blockIdx.x + threadIdx.x) * NumElementsPerThread;
+  if (id >= N) return;
+  using LoadT1 = aligned_vector<T1, NumElementsPerThread>;
+  using LoadT2 = aligned_vector<T2, NumElementsPerThread>;
+  using LoadT = aligned_vector<T, NumElementsPerThread>;
+
+  // Vectorized load into storage.
+  T1 lhs_vec[NumElementsPerThread];
+  T2 rhs_vec[NumElementsPerThread];
+  LoadT1* lhs_value = reinterpret_cast<LoadT1*>(&lhs_vec);
+  LoadT2* rhs_value = reinterpret_cast<LoadT2*>(&rhs_vec);
+  *lhs_value = *reinterpret_cast<const LoadT1*>(&lhs_data[id]);
+  *rhs_value = *reinterpret_cast<const LoadT2*>(&rhs_data[id]);
+
+  T results[NumElementsPerThread];
+#pragma unroll
+  for (int i = 0; i < NumElementsPerThread; ++i) {
+    results[i] = functor(lhs_vec[i], rhs_vec[i]);
+  }
+
+  // Vectorized writes.
+  *(reinterpret_cast<LoadT*>(&output_data[id])) = *reinterpret_cast<LoadT*>(&results[0]);
+}
+
 // for rhs per-channel broadcast case
 template <typename T, typename T1, typename T2, typename FuncT, int NumThreadsPerBlock, int NumElementsPerThread>
 __global__ void _BinaryElementWiseRhsPerChannelBatch1(
@@ -219,12 +246,13 @@ void BinaryElementWiseImpl(
   int blocksPerGrid = static_cast<int>(CeilDiv(count, GridDim::maxThreadsPerBlock * GridDim::maxElementsPerThread));
   CUDA_LONG N = static_cast<CUDA_LONG>(count);
   if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::NoBroadcast)) {
-    _BinaryElementWiseSimple<true, true, T, T1, T2, FuncT, GridDim::maxThreadsPerBlock, GridDim::maxElementsPerThread><<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        output_data,
-        func,
-        N);
+    if (N % GridDim::maxElementsPerThread == 0) {
+      _VectorizedBinaryElementWiseSimple<T, T1, T2, FuncT, GridDim::maxElementsPerThread>
+          <<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0, stream>>>(lhs_data, rhs_data, output_data, func, N);
+    } else {
+      _BinaryElementWiseSimple<true, true, T, T1, T2, FuncT, GridDim::maxThreadsPerBlock, GridDim::maxElementsPerThread>
+          <<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0, stream>>>(lhs_data, rhs_data, output_data, func, N);
+    }
   } else if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::LeftScalar)) {
     _BinaryElementWiseSimple<false, true, T, T1, T2, FuncT, GridDim::maxThreadsPerBlock, GridDim::maxElementsPerThread><<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0, stream>>>(
         lhs_data,
