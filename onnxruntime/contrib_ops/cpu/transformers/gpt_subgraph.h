@@ -2,11 +2,13 @@
 // Licensed under the MIT License.
 
 #pragma once
-//#include <functional>
 #include "gsl/gsl"
 #include "core/framework/allocator.h"
-#include "core/framework/session_state.h"
 #include "core/framework/feeds_fetches_manager.h"
+
+namespace onnxruntime {
+    class SessionState;
+}
 
 namespace onnxruntime {
 namespace contrib {

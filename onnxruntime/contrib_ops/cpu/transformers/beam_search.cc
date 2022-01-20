@@ -10,7 +10,8 @@
 #endif
 
 #include <assert.h>
-#include "core/providers/cpu/controlflow/utils.h"
+#include <functional>
+#include "core/framework/feeds_fetches_manager.h"
 #include "core/providers/cpu/math/top_k.h"
 #include "core/framework/allocator.h"
 #include "core/framework/framework_common.h"
@@ -27,6 +28,7 @@
 #include "logits_processor.h"
 #include "sequences.h"
 #include "dump_tensor.h"
+#include "beam_search_scorer.h"
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -49,7 +51,7 @@ namespace contrib {
       kCpuExecutionProvider,                                      \
       (*KernelDefBuilder::Create())                               \
           .TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), \
-      transformers::BeamSearch<T>);
+      transformers::BeamSearch);
 
 REGISTER_KERNEL_TYPED(float)
 
@@ -182,8 +184,7 @@ class BeamSearchImpl {
   AllocatorPtr allocator_;
 };
 
-template <typename T>
-void BeamSearch<T>::Init(const OpKernelInfo& info) {
+void BeamSearch::Init(const OpKernelInfo& info) {
   // Make sure the body attribute was present even though we don't need it here.
   ONNX_NAMESPACE::GraphProto proto;
   ORT_ENFORCE(info.GetAttr<ONNX_NAMESPACE::GraphProto>("body", &proto).IsOK());
@@ -194,16 +195,7 @@ void BeamSearch<T>::Init(const OpKernelInfo& info) {
   stream_ = nullptr;
 }
 
-template <typename T>
-std::unique_ptr<OpKernel> BeamSearch<T>::Create(const OpKernelInfo& info,
-                                                void* stream) {
-  auto result = std::make_unique<BeamSearch>(info);
-  result->SetComputeStream(stream);
-  return result;
-}
-
-template <typename T>
-common::Status BeamSearch<T>::SetupSubgraphExecutionInfo(const SessionState& session_state,
+Status BeamSearch::SetupSubgraphExecutionInfo(const SessionState& session_state,
                                                          const std::string& attribute_name,
                                                          const SessionState& subgraph_session_state) {
   ORT_ENFORCE(gpt_subgraph_ == nullptr, "SetupSubgraphExecutionInfo should only be called once for each subgraph.");
@@ -218,8 +210,7 @@ common::Status BeamSearch<T>::SetupSubgraphExecutionInfo(const SessionState& ses
   return Status::OK();
 }
 
-template <typename T>
-Status BeamSearch<T>::Compute(OpKernelContext* ctx) const {
+Status BeamSearch::Compute(OpKernelContext* ctx) const {
   auto* ctx_internal = static_cast<OpKernelContextInternal*>(ctx);
   auto* session_state = ctx_internal->SubgraphSessionState("body");
   ORT_ENFORCE(session_state, "Subgraph SessionState was not found for 'body' attribute.");
@@ -229,14 +220,18 @@ Status BeamSearch<T>::Compute(OpKernelContext* ctx) const {
 
   BeamSearchParameters parameters = parameters_;  // make a copy since we will update the parameters based on inputs later
 
-  BeamSearchImpl<T> impl{*ctx_internal, *session_state, *gpt_subgraph_, thread_pool, stream_, parameters};
+  const Tensor* temperature = ctx->Input<Tensor>(5);
+  if (temperature->IsDataType<float>()) {
+    BeamSearchImpl<float> impl{*ctx_internal, *session_state, *gpt_subgraph_, thread_pool, stream_, parameters};
+    ORT_RETURN_IF_ERROR(impl.Initialize());
 
-  auto status = impl.Initialize();
-  ORT_RETURN_IF_ERROR(status);
+    return impl.Execute(*feeds_fetches_manager_);
+  }
 
-  status = impl.Execute(*feeds_fetches_manager_);
-
-  return status;
+  // Won't hit this as the kernel doesn't claim support for any type that will trigger this
+  return ORT_MAKE_STATUS(ONNXRUNTIME, NOT_IMPLEMENTED,
+                         "BeamSearch doesn't have an implementation yet for the type:",
+                         temperature->DataType());
 }
 
 template <typename T>
@@ -645,7 +640,6 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
 
 // Instantiation
 template class BeamSearchImpl<float>;
-template class BeamSearch<float>;
 
 }  // namespace transformers
 }  // namespace contrib
