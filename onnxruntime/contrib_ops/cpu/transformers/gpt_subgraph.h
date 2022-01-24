@@ -5,6 +5,7 @@
 #include "gsl/gsl"
 #include "core/framework/allocator.h"
 #include "core/framework/feeds_fetches_manager.h"
+#include "contrib_ops/cpu/transformers/beam_search_device_helper.h"
 
 namespace onnxruntime {
     class SessionState;
@@ -50,7 +51,8 @@ struct GptSubgraph {
       int num_beams,
       int pad_token_id,
       gsl::span<int64_t>& next_positions,
-      std::vector<OrtValue>& feeds);
+      std::vector<OrtValue>& feeds,
+      const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func);
 
   Status UpdateFeeds(
       const std::vector<OrtValue>& last_outputs,
@@ -66,8 +68,6 @@ struct GptSubgraph {
  protected:
   Status Validate(const std::vector<const NodeArg*>& subgraph_inputs,
                   const std::vector<const NodeArg*>& subgraph_outputs);
-
-  OrtValue ExpandInputs(const OrtValue& input, int num_beams) const;
 
   void PickPastState(const std::vector<OrtValue>& last_outputs,
                      std::vector<OrtValue>& next_inputs,

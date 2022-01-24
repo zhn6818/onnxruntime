@@ -192,8 +192,15 @@ void GptSubgraph::CreateInitialFeeds(
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
-    std::vector<OrtValue>& feeds) {
+    std::vector<OrtValue>& feeds,
+    const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func
+    ) {
   ORT_ENFORCE(session_state_ != nullptr, "Setup must be called before CreateInitialFeeds");
+
+  const TensorShape& input_ids_shape = input_ids.Shape();
+  ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
+  const int64_t& batch_size = input_ids_shape[0];
+  //const int64_t& sequence_length = input_ids_shape[1];
 
   // Subgraph inputs:
   //   input_ids: shape (B, S) wher B is batch size, and S is sequence length
@@ -204,62 +211,8 @@ void GptSubgraph::CreateInitialFeeds(
   // Allocate subgraph inputs to be same device as input_ids
   AllocatorPtr alloactor = session_state_->GetAllocator(input_ids.Location());
 
-  // Store allocator, which is needed in ExpandInputs.
+  // Store allocator, which will be used in remaining feeds
   allocator_ = alloactor;
-
-  const TensorShape& input_ids_shape = input_ids.Shape();
-  ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
-  const int64_t& batch_size = input_ids_shape[0];
-  const int64_t& sequence_length = input_ids_shape[1];
-
-  // Allocate position_ids and attention_mask based on shape of input_ids
-  auto element_type = DataTypeImpl::GetType<int64_t>();
-
-  // input_ids for subgraph is int64, so we need Cast input_ids from int32 to int64.
-  OrtValue subgraph_input_ids;
-  // Current shape is (batch_size, sequence_length)
-  // Note that we will expand it to (batch_size * num_beams, sequence_length) later.
-  Tensor::InitOrtValue(element_type, input_ids_shape, alloactor, subgraph_input_ids);
-
-  int64_t* subgraph_input_data = subgraph_input_ids.GetMutable<Tensor>()->MutableData<int64_t>();
-  const int32_t* source = input_ids.Data<int32_t>();
-  int64_t* target = subgraph_input_data;
-  for (int i = 0; i < batch_size; i++) {
-    for (int j = 0; j < sequence_length; j++, source++, target++) {
-      *target = static_cast<int64_t>(*source);
-    }
-  }
-
-  OrtValue position_ids;
-  Tensor::InitOrtValue(element_type, input_ids_shape, alloactor, position_ids);
-
-  OrtValue attention_mask;
-  auto mask_type = DataTypeImpl::GetType<float>();
-  Tensor::InitOrtValue(mask_type, input_ids_shape, alloactor, attention_mask);
-
-  // Set attention mask to be 0 for pad tokens, and 1 for all other tokens.
-  // Set position id to be 0 for pad tokens, and cumulated sum of mask in a batch for other tokens
-  float* mask_data = attention_mask.GetMutable<Tensor>()->MutableData<float>();
-  int64_t* position_data = position_ids.GetMutable<Tensor>()->MutableData<int64_t>();
-  source = input_ids.Data<int32_t>();
-  float* mask = mask_data;
-  int64_t* position = position_data;
-  for (int i = 0; i < batch_size; i++) {
-    int64_t abs_position = 0;
-    for (int j = 0; j < sequence_length; j++, source++, mask++, position++) {
-      if (*source == pad_token_id) {
-        *mask = 0.0f;
-        *position = 0;
-      } else {
-        *mask = 1.0f;
-        *position = abs_position;
-        abs_position++;
-      }
-    }
-    for (int k = 0; k < num_beams; k++) {
-      next_positions[i * num_beams + k] = abs_position;
-    }
-  }
 
   // Initialize empty past state
   auto past_type = DataTypeImpl::GetType<float>();
@@ -268,17 +221,10 @@ void GptSubgraph::CreateInitialFeeds(
   OrtValue empty_past;
   Tensor::InitOrtValue(past_type, past_shape, allocator_, empty_past);
 
-  // Expand (batch_size, sequence_length) to (batch_size * num_beams, sequence_length) for input_ids, position_ids and attention_mask
-  // TODO: Try expand inputs/outputs after first subgraph call instead. That may get better peroformance, but more complex to implement.
-  OrtValue expanded_input_ids = ExpandInputs(subgraph_input_ids, num_beams);
-  OrtValue expanded_position_ids = ExpandInputs(position_ids, num_beams);
-  OrtValue expanded_attention_mask = ExpandInputs(attention_mask, num_beams);
-
   // The ordering is the same as used in Setup
   feeds.reserve(num_subgraph_inputs + num_implicit_inputs);
-  feeds.push_back(expanded_input_ids);
-  feeds.push_back(expanded_position_ids);
-  feeds.push_back(expanded_attention_mask);
+
+  create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, alloactor, feeds);
 
   // The remaing inputs are past state.
   for (int i = 3; i < num_subgraph_inputs; ++i) {
@@ -289,48 +235,6 @@ void GptSubgraph::CreateInitialFeeds(
   for (const auto* entry : implicit_inputs) {
     feeds.push_back(*entry);
   }
-}
-
-OrtValue GptSubgraph::ExpandInputs(const OrtValue& input, int num_beams) const {
-  // Input shape (batch_size, sequence_length)
-  // Output shape (batch_size * num_beams, sequence_length)
-  if (num_beams == 1)
-    return input;
-
-  const TensorShape& input_shape = input.Get<Tensor>().Shape();
-  const int64_t& batch_size = input_shape[0];
-  const int64_t& sequence_length = input_shape[1];
-
-  int64_t dims[] = {batch_size * num_beams, sequence_length};
-  TensorShape expanded_shape(&dims[0], 2);
-
-  OrtValue expanded;
-  MLDataType element_type = input.Get<Tensor>().DataType();
-  Tensor::InitOrtValue(element_type, expanded_shape, allocator_, expanded);
-
-  if (element_type == DataTypeImpl::GetType<int64_t>()) {
-    const int64_t* input_data = input.Get<Tensor>().Data<int64_t>();
-    int64_t* expanded_data = expanded.GetMutable<Tensor>()->MutableData<int64_t>();
-    int64_t* target = expanded_data;
-    for (int i = 0; i < batch_size; i++) {
-      for (int j = 0; j < num_beams; j++) {
-        memcpy(target, input_data + i * sequence_length, sizeof(int64_t) * sequence_length);
-        target += sequence_length;
-      }
-    }
-  } else if (element_type == DataTypeImpl::GetType<float>()) {
-    const float* input_data = input.Get<Tensor>().Data<float>();
-    float* expanded_data = expanded.GetMutable<Tensor>()->MutableData<float>();
-    float* target = expanded_data;
-    for (int i = 0; i < batch_size; i++) {
-      for (int j = 0; j < num_beams; j++) {
-        memcpy(target, input_data + i * sequence_length, sizeof(float) * sequence_length);
-        target += sequence_length;
-      }
-    }
-  }
-
-  return expanded;
 }
 
 // TODO: support float16

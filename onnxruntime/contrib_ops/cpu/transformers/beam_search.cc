@@ -126,9 +126,12 @@ class BeamSearchImpl {
                  GptSubgraph& gpt_subgraph,
                  concurrency::ThreadPool* thread_pool,
                  void* stream,
-                 BeamSearchParameters& params);
+                 BeamSearchParameters& params,
+                 const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func,
+                 const BeamSearchDeviceHelper::TopkFunc& topk_func
+                 );
 
-  // Initialize by validating all the inputs, and allocating the output tensors.
+  // Initialize by validating all the inputs, and allocating the   tensors.
   Status Initialize();
 
   // Execute beam search in iterations util stopping criteria is reached.
@@ -181,7 +184,11 @@ class BeamSearchImpl {
 
   std::unique_ptr<BeamSearchScorer<T>> beam_scorer_;
 
-  AllocatorPtr allocator_;
+  AllocatorPtr cpu_allocator_;
+
+  // Device specific functions
+  BeamSearchDeviceHelper::CreateInputsFunc create_inputs_func_;
+  BeamSearchDeviceHelper::TopkFunc topk_func_;
 };
 
 void BeamSearch::Init(const OpKernelInfo& info) {
@@ -222,7 +229,10 @@ Status BeamSearch::Compute(OpKernelContext* ctx) const {
 
   const Tensor* temperature = ctx->Input<Tensor>(5);
   if (temperature->IsDataType<float>()) {
-    BeamSearchImpl<float> impl{*ctx_internal, *session_state, *gpt_subgraph_, thread_pool, stream_, parameters};
+    BeamSearchImpl<float> impl{*ctx_internal, *session_state, *gpt_subgraph_, thread_pool, stream_, parameters,
+      create_inputs_func_ ? create_inputs_func_ : BeamSearchCpuDeviceHelper::CreateInputs,
+      topk_func_ ? topk_func_ : BeamSearchCpuDeviceHelper::TopK
+    };
     ORT_RETURN_IF_ERROR(impl.Initialize());
 
     return impl.Execute(*feeds_fetches_manager_);
@@ -240,7 +250,9 @@ BeamSearchImpl<T>::BeamSearchImpl(OpKernelContextInternal& context,
                                   GptSubgraph& gpt_subgraph,
                                   concurrency::ThreadPool* thread_pool,
                                   void* stream,
-                                  BeamSearchParameters& params)
+                                  BeamSearchParameters& params,
+                                  const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func,
+                                  const BeamSearchDeviceHelper::TopkFunc& topk_func)
     : context_(context),
       session_state_(session_state),
       gpt_subgraph_(gpt_subgraph),
@@ -248,10 +260,13 @@ BeamSearchImpl<T>::BeamSearchImpl(OpKernelContextInternal& context,
       implicit_inputs_(context_.GetImplicitInputs()),
       stream_(stream),
       parameters_(&params),
-      allocator_(nullptr) {
+      cpu_allocator_(nullptr),
+      create_inputs_func_(create_inputs_func),
+      topk_func_(topk_func)
+      {
   parameters_->ParseFromInputs(&context);
 
-  allocator_ = session_state.GetExecutionProviders()
+  cpu_allocator_ = session_state.GetExecutionProviders()
                    .Get(onnxruntime::kCpuExecutionProvider)
                    ->GetAllocator(0, OrtMemTypeDefault);
 }
@@ -334,7 +349,7 @@ template <typename T>
 void BeamSearchImpl<T>::CreateInitialFeeds(gsl::span<int64_t>& next_positions, std::vector<OrtValue>& feeds) {
   const OrtValue* input_ids_value = context_.GetInputOrtValue(0);
   const Tensor& input_ids = input_ids_value->Get<Tensor>();
-  gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, next_positions, feeds);
+  gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, next_positions, feeds, create_inputs_func_);
 }
 
 template <typename T>
@@ -435,7 +450,8 @@ Status BeamSearchImpl<T>::ProcessLogits(
 
   std::unique_ptr<Tensor> topk_scores;
   std::unique_ptr<Tensor> topk_indices;
-  status = GetTopK<T>(&input, axis, top_k, largest, sorted, allocator, thread_pool_, topk_scores, topk_indices);
+  //status = GetTopK<T>(&input, axis, top_k, largest, sorted, allocator, thread_pool_, topk_scores, topk_indices);
+  status = topk_func_(&input, axis, top_k, largest, sorted, allocator, thread_pool_, topk_scores, topk_indices);
   if (!status.IsOK()) {
     return status;
   }
@@ -483,7 +499,7 @@ Status BeamSearchImpl<T>::GenerateNextToken(
     gsl::span<int64_t>& beam_indices,
     BeamSearchState<T>& beam_state) {
   // Process logits to get next token scores
-  ORT_RETURN_IF_ERROR(ProcessLogits(logits, beam_state, allocator_));
+  ORT_RETURN_IF_ERROR(ProcessLogits(logits, beam_state, cpu_allocator_));
 
   gsl::span<T>& beam_scores = beam_scorer_->GetNextScores();
   // It is optional to clone beam_scores. Change it to use same buffer also works:
@@ -545,11 +561,11 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
   std::vector<OrtValue> fetches;
 
   // Initialize resources
-  AllocatorPtr temp_space_allocator;
-  ORT_RETURN_IF_ERROR(context_.GetTempSpaceAllocator(&temp_space_allocator));
+  // AllocatorPtr device_allocator;
+  // ORT_RETURN_IF_ERROR(context_.GetTempSpaceAllocator(&device_allocator));
 
   BeamSearchState<T> beam_state;
-  beam_state.Init(temp_space_allocator,
+  beam_state.Init(cpu_allocator_,
                   parameters_->batch_size,
                   parameters_->num_beams,
                   parameters_->vocab_size,
@@ -565,11 +581,11 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
                                                        parameters_->num_return_sequences,
                                                        parameters_->pad_token_id,
                                                        parameters_->eos_token_id);
-  beam_scorer_->Initialize(allocator_, parameters_->sequence_length);  // TODO: use temp_space_allocator
+  beam_scorer_->Initialize(cpu_allocator_, parameters_->sequence_length);  // TODO: use device_allocator
 
   CreateInitialFeeds(beam_state.next_positions, feeds);
   const OrtValue& input_ids = feeds[0];
-  beam_state.sequences.Init(temp_space_allocator,
+  beam_state.sequences.Init(cpu_allocator_,
                             input_ids,
                             parameters_->BatchBeamSize(),
                             parameters_->sequence_length,
