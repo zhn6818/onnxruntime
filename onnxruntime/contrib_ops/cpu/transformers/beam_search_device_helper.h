@@ -21,6 +21,7 @@ namespace contrib {
 namespace BeamSearchDeviceHelper{
   using TopkFunc = std::function<Status(const Tensor* input, const int axis, const unsigned k, bool largest, bool sorted,
                                         AllocatorPtr allocator,
+                                        void* stream, //cudaStream_t stream,
                                         onnxruntime::concurrency::ThreadPool* threadpool,
                                         std::unique_ptr<Tensor>& output_values,
                                         std::unique_ptr<Tensor>& output_indices)>;
@@ -39,6 +40,7 @@ namespace BeamSearchDeviceHelper{
 namespace BeamSearchCpuDeviceHelper {
 Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest, bool sorted,
             AllocatorPtr allocator,
+            void* stream,
             onnxruntime::concurrency::ThreadPool* threadpool,
             std::unique_ptr<Tensor>& output_values,
             std::unique_ptr<Tensor>& output_indices);

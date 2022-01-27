@@ -1,18 +1,74 @@
+#include "core/providers/shared_library/provider_api.h"
+#include "core/providers/cuda/math/topk_impl.h"
+#include "core/framework/ort_value.h"
+
+namespace onnxruntime {
+namespace concurrency {
+class ThreadPool;
+}
+}  // namespace onnxruntime
+
 #include "beam_search_device_helper.h"
-#include "core/providers/cpu/math/top_k.h"
 
 namespace onnxruntime {
 namespace contrib {
-namespace BeamSearchCpuDeviceHelper {
+namespace BeamSearchCudaDeviceHelper {
 
 Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest, bool sorted,
             AllocatorPtr allocator,
-            void* /*stream*/,
-            onnxruntime::concurrency::ThreadPool* threadpool,
+            void* stream,
+            onnxruntime::concurrency::ThreadPool* /*threadpool*/,
             std::unique_ptr<Tensor>& output_values,
             std::unique_ptr<Tensor>& output_indices) {
+  ORT_ENFORCE(nullptr != input);
+  int32_t rank = static_cast<int32_t>(input->Shape().NumDimensions());
+
+  ORT_ENFORCE(axis >= 0 && axis < rank);
+  ORT_ENFORCE(k > 0 && k <= input->Shape().GetDims()[axis]);
+
+  auto output_shape = input->Shape();
+  output_shape[axis] = k;
+
+  auto elem_nums = input->Shape().GetDimsAsVector();
+  int64_t dimension = elem_nums[axis];
+  for (auto i = static_cast<int32_t>(elem_nums.size()) - 2; i >= 0; --i) {
+    elem_nums[i] *= elem_nums[i + 1];
+  }
+
+  int64_t N = elem_nums[0] / dimension;
+  TArray<int64_t> elem_nums_cuda(elem_nums);
+
+  output_values = Tensor::Create(input->DataType(), output_shape, allocator);
+  output_indices = Tensor::Create(DataTypeImpl::GetType<int64_t>(), output_shape, allocator);
+
   if (input->IsDataType<float>()) {
-    return GetTopK<float>(input, axis, k, largest, sorted, allocator, threadpool, output_values, output_indices);
+    return TopKImpl<float>(nullptr, // We limit number of beams in BeamSearchParameters, so that K <= 256 and kernel is not needed
+                           reinterpret_cast<cudaStream_t>(stream),
+                           input->Data<float>(),
+                           static_cast<float*>(output_values->MutableDataRaw()),
+                           static_cast<int64_t*>(output_indices->MutableDataRaw()),
+                           elem_nums_cuda,
+                           elem_nums.size(),
+                           static_cast<int32_t>(axis),
+                           static_cast<int64_t>(k),
+                           static_cast<int64_t>(largest),
+                           static_cast<int64_t>(sorted),
+                           N,
+                           dimension);
+  } else if (input->IsDataType<MLFloat16>()) {
+    return TopKImpl<MLFloat16>(nullptr,
+                               reinterpret_cast<cudaStream_t>(stream),
+                               input->Data<MLFloat16>(),
+                               static_cast<MLFloat16*>(output_values->MutableDataRaw()),
+                               static_cast<int64_t*>(output_indices->MutableDataRaw()),
+                               elem_nums_cuda,
+                               elem_nums.size(),
+                               static_cast<int32_t>(axis),
+                               static_cast<int64_t>(k),
+                               static_cast<int64_t>(largest),
+                               static_cast<int64_t>(sorted),
+                               N,
+                               dimension);
   }
 
   return ORT_MAKE_STATUS(ONNXRUNTIME, NOT_IMPLEMENTED,
