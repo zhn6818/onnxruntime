@@ -24,13 +24,14 @@ Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest,
             std::unique_ptr<Tensor>& output_values,
             std::unique_ptr<Tensor>& output_indices);
 
-void CreateInputs(
+Status CreateInputs(
     const Tensor* original_input_ids,
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
     AllocatorPtr alloactor,
-    std::vector<OrtValue>& feeds);
+    std::vector<OrtValue>& feeds,
+    const IExecutionProvider* provider);
 
 }  // namespace BeamSearchCpuDeviceHelper
 }  // namespace contrib

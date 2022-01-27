@@ -143,7 +143,7 @@ class BeamSearchImpl {
   Status CheckInputs(const OpKernelContextInternal& context);
 
   // Prepare the inputs for first inference of subgraph
-  void CreateInitialFeeds(gsl::span<int64_t>& next_positions, std::vector<OrtValue>& feeds);
+  Status CreateInitialFeeds(gsl::span<int64_t>& next_positions, std::vector<OrtValue>& feeds);
 
   // Update the input for next iteration.
   Status UpdateFeeds(
@@ -346,10 +346,10 @@ Status BeamSearchImpl<T>::Initialize() {
 }
 
 template <typename T>
-void BeamSearchImpl<T>::CreateInitialFeeds(gsl::span<int64_t>& next_positions, std::vector<OrtValue>& feeds) {
+Status BeamSearchImpl<T>::CreateInitialFeeds(gsl::span<int64_t>& next_positions, std::vector<OrtValue>& feeds) {
   const OrtValue* input_ids_value = context_.GetInputOrtValue(0);
   const Tensor& input_ids = input_ids_value->Get<Tensor>();
-  gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, next_positions, feeds, create_inputs_func_);
+  return gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, next_positions, feeds, create_inputs_func_);
 }
 
 template <typename T>
@@ -451,7 +451,7 @@ Status BeamSearchImpl<T>::ProcessLogits(
   std::unique_ptr<Tensor> topk_scores;
   std::unique_ptr<Tensor> topk_indices;
   //status = GetTopK<T>(&input, axis, top_k, largest, sorted, allocator, thread_pool_, topk_scores, topk_indices);
-  status = topk_func_(&input, axis, top_k, largest, sorted, allocator, thread_pool_, topk_scores, topk_indices);
+  status = topk_func_(&input, axis, top_k, largest, sorted, allocator, stream_, thread_pool_, topk_scores, topk_indices);
   if (!status.IsOK()) {
     return status;
   }
@@ -583,7 +583,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
                                                        parameters_->eos_token_id);
   beam_scorer_->Initialize(cpu_allocator_, parameters_->sequence_length);  // TODO: use device_allocator
 
-  CreateInitialFeeds(beam_state.next_positions, feeds);
+  ORT_RETURN_IF_ERROR(CreateInitialFeeds(beam_state.next_positions, feeds));
   const OrtValue& input_ids = feeds[0];
   beam_state.sequences.Init(cpu_allocator_,
                             input_ids,

@@ -16,6 +16,7 @@ ONNX_OPERATOR_KERNEL_EX(
     1,
     kCudaExecutionProvider,
     (*KernelDefBuilder::Create())
+        .InputMemoryType(OrtMemTypeCPUInput, 0)  // 'input_ids' needs to be on CPU
         .InputMemoryType(OrtMemTypeCPUInput, 1)  // 'max_length' needs to be on CPU
         .InputMemoryType(OrtMemTypeCPUInput, 2)  // 'min_length' needs to be on CPU
         .InputMemoryType(OrtMemTypeCPUInput, 3)  // 'num_beams' needs to be on CPU

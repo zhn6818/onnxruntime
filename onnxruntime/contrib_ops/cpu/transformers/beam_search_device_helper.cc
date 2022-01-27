@@ -62,13 +62,14 @@ OrtValue ExpandInputs(const OrtValue& input, int num_beams, AllocatorPtr allocat
   return expanded;
 }
 
-void CreateInputs(
+Status CreateInputs(
     const Tensor* original_input_ids,
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
     AllocatorPtr alloactor,
-    std::vector<OrtValue>& feeds) {
+    std::vector<OrtValue>& feeds,
+    const IExecutionProvider* /*provider*/) {
   const TensorShape& input_ids_shape = original_input_ids->Shape();
   ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
   const int64_t& batch_size = input_ids_shape[0];
@@ -131,6 +132,7 @@ void CreateInputs(
   feeds.push_back(expanded_input_ids);
   feeds.push_back(expanded_position_ids);
   feeds.push_back(expanded_attention_mask);
+  return Status::OK();
 }
 
 }  // namespace BeamSearchCpuDeviceHelper

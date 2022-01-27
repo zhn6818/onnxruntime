@@ -10,6 +10,7 @@
 #include "gsl/gsl"
 
 namespace onnxruntime {
+class IExecutionProvider;
 namespace concurrency {
 class ThreadPool;
 }
@@ -27,13 +28,14 @@ namespace BeamSearchDeviceHelper{
                                         std::unique_ptr<Tensor>& output_indices)>;
 
   // Create subgraph inputs: input_ids, position_ids and attention_mask
-  using CreateInputsFunc = std::function<void(const Tensor* original_input_ids,
-                                              int num_beams,
-                                              int pad_token_id,
-                                              gsl::span<int64_t>& next_positions,
-                                              AllocatorPtr alloactor,
-                                              std::vector<OrtValue>& feeds
-                                              )>;
+  using CreateInputsFunc = std::function<Status(const Tensor* original_input_ids,
+                                                int num_beams,
+                                                int pad_token_id,
+                                                gsl::span<int64_t>& next_positions,
+                                                AllocatorPtr alloactor,
+                                                std::vector<OrtValue>& feeds,
+                                                const IExecutionProvider* provider
+                                                )>;
 }
 
 // These are CPU specific device helper implementations
@@ -45,13 +47,14 @@ Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest,
             std::unique_ptr<Tensor>& output_values,
             std::unique_ptr<Tensor>& output_indices);
 
-void CreateInputs(
+Status CreateInputs(
     const Tensor* original_input_ids,
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
     AllocatorPtr alloactor,
-    std::vector<OrtValue>& feeds);
+    std::vector<OrtValue>& feeds,
+    const IExecutionProvider* provider);
 
 }  // namespace BeamSearchCpuDeviceHelper
 }  // namespace contrib

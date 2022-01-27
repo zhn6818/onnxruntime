@@ -186,7 +186,7 @@ Status GptSubgraph::Setup(const SessionState& session_state,
   return Status::OK();
 }
 
-void GptSubgraph::CreateInitialFeeds(
+Status GptSubgraph::CreateInitialFeeds(
     const Tensor& input_ids,
     const std::vector<const OrtValue*>& implicit_inputs,
     int num_beams,
@@ -196,6 +196,11 @@ void GptSubgraph::CreateInitialFeeds(
     const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func
     ) {
   ORT_ENFORCE(session_state_ != nullptr, "Setup must be called before CreateInitialFeeds");
+
+  const ExecutionProviders& providers = session_state_->GetExecutionProviders();
+  const IExecutionProvider* cpu_provider = providers.Get(onnxruntime::kCpuExecutionProvider);
+  const IExecutionProvider* cuda_provider = providers.Get(onnxruntime::kCudaExecutionProvider);
+  const IExecutionProvider* provider = cuda_provider ? cuda_provider : cpu_provider;
 
   const TensorShape& input_ids_shape = input_ids.Shape();
   ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
@@ -209,22 +214,24 @@ void GptSubgraph::CreateInitialFeeds(
   // After expansion, their shapes will become (B, M*S), where M is num_beams.
 
   // Allocate subgraph inputs to be same device as input_ids
-  AllocatorPtr alloactor = session_state_->GetAllocator(input_ids.Location());
+  AllocatorPtr cpu_alloactor = session_state_->GetAllocator(input_ids.Location());
 
   // Store allocator, which will be used in remaining feeds
-  allocator_ = alloactor;
+  allocator_ = cpu_alloactor;
+
+  auto default_allocator = provider->GetAllocator(0, OrtMemTypeDefault);
 
   // Initialize empty past state
   auto past_type = DataTypeImpl::GetType<float>();
   int64_t past_state_dims[] = {2, batch_size * num_beams, num_heads, 0, head_size};
   TensorShape past_shape(&past_state_dims[0], 5);
   OrtValue empty_past;
-  Tensor::InitOrtValue(past_type, past_shape, allocator_, empty_past);
+  Tensor::InitOrtValue(past_type, past_shape, default_allocator, empty_past);
 
   // The ordering is the same as used in Setup
   feeds.reserve(num_subgraph_inputs + num_implicit_inputs);
 
-  create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, alloactor, feeds);
+  ORT_RETURN_IF_ERROR(create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, cpu_alloactor, feeds, provider));
 
   // The remaing inputs are past state.
   for (int i = 3; i < num_subgraph_inputs; ++i) {
@@ -235,6 +242,8 @@ void GptSubgraph::CreateInitialFeeds(
   for (const auto* entry : implicit_inputs) {
     feeds.push_back(*entry);
   }
+
+  return Status::OK();
 }
 
 // TODO: support float16

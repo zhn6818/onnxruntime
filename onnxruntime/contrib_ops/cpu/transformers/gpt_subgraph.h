@@ -45,7 +45,7 @@ struct GptSubgraph {
                const SessionState& subgraph_session_state);
 
   // Create inputs for first inference of subgraph.
-  void CreateInitialFeeds(
+  Status CreateInitialFeeds(
       const Tensor& input_ids,
       const std::vector<const OrtValue*>& implicit_inputs,
       int num_beams,

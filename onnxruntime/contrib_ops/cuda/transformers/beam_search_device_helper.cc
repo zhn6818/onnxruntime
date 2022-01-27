@@ -1,7 +1,7 @@
 #include "core/providers/shared_library/provider_api.h"
 #include "core/providers/cuda/math/topk_impl.h"
 #include "core/framework/ort_value.h"
-
+#include "contrib_ops/cuda/bert/transformer_cuda_common.h"
 namespace onnxruntime {
 namespace concurrency {
 class ThreadPool;
@@ -118,13 +118,62 @@ OrtValue ExpandInputs(const OrtValue& input, int num_beams, AllocatorPtr allocat
   return expanded;
 }
 
-void CreateInputs(
+Status CopyFeedsToGpu(
+  const CUDAExecutionProvider* provider, //const_cast<CUDAExecutionProvider*>(static_cast<const CUDAExecutionProvider*>(kernel_info.GetExecutionProvider()));
+  OrtValue input_ids,
+  OrtValue position_ids,
+  OrtValue attention_mask,
+  std::vector<OrtValue>& feeds) {
+  //TODO: use provider->GetDataTransfer()->CopyTensor(src_tensor, dst_tensor)?
+
+  const TensorShape& shape = input_ids.Get<Tensor>().Shape();
+  ORT_ENFORCE(shape.NumDimensions() == 2);
+  const int64_t elements = shape[0] * shape[1];
+
+  AllocatorPtr allocator = provider->GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
+  cudaStream_t stream = static_cast<cudaStream_t>(provider->GetComputeStream());
+
+  size_t bytes = (sizeof(int64_t) + sizeof(int64_t) + sizeof(float)) * elements;
+  auto pinned_buffer = IAllocator::MakeUniquePtr<void>(allocator, bytes);
+  char* pinned_data = static_cast<char*>(pinned_buffer.get());
+
+  // Copy tensors to one pinned memory buffer (so that we only need copy to GPU once)
+  memcpy(pinned_data, input_ids.Get<Tensor>().Data<int64_t>(), sizeof(int64_t) * elements);
+  memcpy(pinned_data + sizeof(int64_t) * elements, position_ids.Get<Tensor>().Data<int64_t>(), sizeof(int64_t) * elements);
+  memcpy(pinned_data + 2 * sizeof(int64_t) * elements, attention_mask.Get<Tensor>().Data<float>(), sizeof(int64_t) * elements);
+
+  IAllocatorUniquePtr<char> gpu_buffer = provider->GetScratchBuffer<char>(bytes);
+  char* gpu_data = gpu_buffer.get();
+  CUDA_RETURN_IF_ERROR(cudaMemcpyAsync(gpu_data, pinned_data, bytes, cudaMemcpyHostToDevice, stream));
+
+  // Create an event to make sure the async copy is finished before reading the data.
+  onnxruntime::contrib::cuda::AutoDestoryCudaEvent new_event;
+  cudaEvent_t& isCopyDone = new_event.Get();
+  CUDA_RETURN_IF_ERROR(cudaEventCreate(&isCopyDone));
+  CUDA_RETURN_IF_ERROR(cudaEventRecord(isCopyDone, stream));
+  CUDA_RETURN_IF_ERROR(cudaEventSynchronize(isCopyDone));
+
+  OrtValue device_input_ids;
+  OrtValue device_position_ids;
+  OrtValue device_attention_mask;
+  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data, allocator->Info(), device_input_ids);
+  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data + sizeof(int64_t) * elements, allocator->Info(), device_position_ids);
+  Tensor::InitOrtValue(DataTypeImpl::GetType<float>(), shape, gpu_data + 2 * sizeof(int64_t) * elements, allocator->Info(), device_attention_mask);
+
+  feeds.push_back(device_input_ids);
+  feeds.push_back(device_position_ids);
+  feeds.push_back(device_attention_mask);
+  return Status::OK();
+}
+
+Status CreateInputs(
     const Tensor* original_input_ids,
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
-    AllocatorPtr alloactor,
-    std::vector<OrtValue>& feeds) {
+    AllocatorPtr alloactor,             // CPU allocator of original input_ids
+    std::vector<OrtValue>& feeds,
+    const IExecutionProvider* provider) {
   const TensorShape& input_ids_shape = original_input_ids->Shape();
   ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
   const int64_t& batch_size = input_ids_shape[0];
@@ -184,9 +233,10 @@ void CreateInputs(
   OrtValue expanded_position_ids = ExpandInputs(position_ids, num_beams, alloactor);
   OrtValue expanded_attention_mask = ExpandInputs(attention_mask, num_beams, alloactor);
 
-  feeds.push_back(expanded_input_ids);
-  feeds.push_back(expanded_position_ids);
-  feeds.push_back(expanded_attention_mask);
+  //feeds.push_back(expanded_input_ids);
+  //feeds.push_back(expanded_position_ids);
+  //feeds.push_back(expanded_attention_mask);
+  return CopyFeedsToGpu(static_cast<const CUDAExecutionProvider*>(provider), expanded_input_ids, expanded_position_ids, expanded_attention_mask, feeds);
 }
 
 }  // namespace BeamSearchCpuDeviceHelper
