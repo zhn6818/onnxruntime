@@ -404,16 +404,16 @@ set(onnxruntime_test_ir_libs
 
 set(onnxruntime_test_optimizer_libs
   onnxruntime_test_utils
+  onnxruntime_util  
   onnxruntime_framework
-  onnxruntime_util
   onnxruntime_graph
   onnxruntime_common
 )
 
 set(onnxruntime_test_framework_libs
   onnxruntime_test_utils
+  onnxruntime_util  
   onnxruntime_framework
-  onnxruntime_util
   onnxruntime_graph
   ${ONNXRUNTIME_MLAS_LIBS}
   onnxruntime_common
@@ -501,7 +501,6 @@ set(ONNXRUNTIME_TEST_LIBS
     onnxruntime_util
     ${onnxruntime_tvm_libs}
     onnxruntime_framework
-    onnxruntime_util
     onnxruntime_graph
     ${ONNXRUNTIME_MLAS_LIBS}
     onnxruntime_common
