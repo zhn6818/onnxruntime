@@ -84,12 +84,12 @@ void OnlineBeamSearchLayer<T>::invokeSoftMax(std::vector<Tensor>* output_tensors
 {
     // input_tensors:
     //      logits [local_batch_size, beam_width_, vocab_size_padded]
-    //      embedding_bias [vocab_size_padded]
+    ////      embedding_bias [vocab_size_padded]
     //      step [1] on cpu
-    //      src_key_cache [num_layer, batch_size * beam_width, head_num, size_per_head // x, max_seq_len, x]
-    //      src_value_cache [num_layer, batch_size * beam_width, head_num, max_seq_len, size_per_head]
-    //      max_input_length [1] on cpu
-    //      input_lengths [local_batch_size * beam_width_]
+    ////      src_key_cache [num_layer, batch_size * beam_width, head_num, size_per_head // x, max_seq_len, x]
+    ////      src_value_cache [num_layer, batch_size * beam_width, head_num, max_seq_len, size_per_head]
+    ////      max_input_length [1] on cpu
+    ////      input_lengths [local_batch_size * beam_width_]
     //      ite [1] on cpu
 
     // output_tensors:
@@ -98,8 +98,8 @@ void OnlineBeamSearchLayer<T>::invokeSoftMax(std::vector<Tensor>* output_tensors
     //      cum_logits [local_batch_size * beam_width]
     //      parent_ids [max_seq_len, batch_size * beam_width]
     //      sequence_length [local_batch_size * beam_width]
-    //      tgt_key_cache [num_layer, batch_size * beam_width, head_num, size_per_head // x, max_seq_len, x]
-    //      tgt_value_cache [num_layer, batch_size * beam_width, head_num, max_seq_len, size_per_head]
+    ////      tgt_key_cache [num_layer, batch_size * beam_width, head_num, size_per_head // x, max_seq_len, x]
+    ////      tgt_value_cache [num_layer, batch_size * beam_width, head_num, max_seq_len, size_per_head]
 
     FT_CHECK(input_tensors->size() == 8);
     FT_CHECK(output_tensors->size() == 7);
