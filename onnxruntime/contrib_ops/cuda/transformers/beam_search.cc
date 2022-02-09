@@ -5,6 +5,7 @@
 #include "core/providers/cuda/cuda_execution_provider.h"
 #include "contrib_ops/cuda/transformers/beam_search.h"
 #include "beam_search_device_helper.h"
+#include "dump_cuda_tensor.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -24,14 +25,25 @@ ONNX_OPERATOR_KERNEL_EX(
         .InputMemoryType(OrtMemTypeCPUInput, 5)  // 'temperature' needs to be on CPU
         .InputMemoryType(OrtMemTypeCPUInput, 6)  // 'length_penalty' needs to be on CPU
         .InputMemoryType(OrtMemTypeCPUInput, 7)  // 'repetition_penalty' needs to be on CPU
+        .OutputMemoryType(OrtMemTypeCPUOutput, 0) // 'sequences' output on CPU
+        .OutputMemoryType(OrtMemTypeCPUOutput, 1) // 'sequences_scores' output on CPU
         .TypeConstraint("T", {DataTypeImpl::GetTensorType<float>(),
                               DataTypeImpl::GetTensorType<MLFloat16>()}),
     BeamSearch);
 
+transformers::CudaTensorConsoleDumper g_cuda_dumper;
+
 BeamSearch::BeamSearch(const OpKernelInfo& info)
     : onnxruntime::contrib::transformers::BeamSearch(info) {
   SetComputeStream(static_cast<void*>(info.GetExecutionProvider()->GetComputeStream()));
-  SetDeviceHelpers(BeamSearchCudaDeviceHelper::CreateInputs, BeamSearchCudaDeviceHelper::TopK);
+  // TODO: handle float16
+  SetDeviceHelpers(BeamSearchCudaDeviceHelper::AddToFeeds,
+                   BeamSearchCudaDeviceHelper::TopK);
+  SetDeviceHelpers(BeamSearchCudaDeviceHelper::ProcessLogits,
+                   BeamSearchCudaDeviceHelper::InitBeamState,
+                   BeamSearchCudaDeviceHelper::DeviceCopy,
+                   BeamSearchCudaDeviceHelper::UpdateFeeds);
+  SetConsoleDumper(&g_cuda_dumper);
 }
 
 Status BeamSearch::ComputeInternal(OpKernelContext* context) const{

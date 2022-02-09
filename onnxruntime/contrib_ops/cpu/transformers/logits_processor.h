@@ -1,6 +1,7 @@
 #pragma once
 #include "sequences.h"
 #include "beam_search_parameters.h"
+#include "beam_search_shared.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -77,11 +78,11 @@ class VocabMaskLogitsProcessor : public ILogitsProcessor<T> {
 };
 
 template <typename T>
-class LogitsProcessorList {
+class LogitsProcessorList : public ILogitsProcessorList<T>{
 public:
     LogitsProcessorList() = default ;
     void Init(const BeamSearchParameters& parameters);
-    void Process(const ISequences* sequences, gsl::span<T>& next_token_scores);
+    void Process(const ISequences* sequences, gsl::span<T>& next_token_scores) override;
 
 private:
     int batch_beam_size_;

@@ -51,27 +51,20 @@ struct GptSubgraph {
       int num_beams,
       int pad_token_id,
       gsl::span<int64_t>& next_positions,
+      OrtValue& expanded_input_ids,
       std::vector<OrtValue>& feeds,
-      const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func);
-
-  Status UpdateFeeds(
-      const std::vector<OrtValue>& last_outputs,
-      std::vector<OrtValue>& next_inputs,
-      int current_length,
-      gsl::span<int64_t>& next_positions,
-      gsl::span<const int64_t> beam_next_tokens,
-      gsl::span<const int64_t> beam_indices,
-      int num_beams);
+      const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func,
+      const BeamSearchDeviceHelper::AddToFeedsFunc& add_to_feeds_func,
+      IAllocatorUniquePtr<char>& buffer
+      );
 
   FeedsFetchesManager* GetFeedsFetchesManager() const { return feeds_fetches_manager_.get(); }
 
+  const IExecutionProvider* GetProvider() const;
+  
  protected:
   Status Validate(const std::vector<const NodeArg*>& subgraph_inputs,
                   const std::vector<const NodeArg*>& subgraph_outputs);
-
-  void PickPastState(const std::vector<OrtValue>& last_outputs,
-                     std::vector<OrtValue>& next_inputs,
-                     gsl::span<const int64_t>& beam_indices);
 
   AllocatorPtr allocator_;
   const SessionState* session_state_;

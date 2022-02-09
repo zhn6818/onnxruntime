@@ -5,10 +5,7 @@
 #include <iomanip>
 #include <string>
 #include "core/framework/tensorprotoutils.h"
-
-#ifndef NDEBUG
-//#define DEBUG_BEAM_SEARCH 1  // uncomment it for debugging beam search
-#endif
+#include "beam_search_shared.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -38,49 +35,11 @@ void PrintValue(const T& value) {
     std::cout << value;
 }
 
-template <typename T>
-void DumpTensor(const char* name, const Tensor& tensor) {
-  if (!g_enable_tensor_dump)
-    return;
+void DumpString(const char* name, int index, bool end_line);
 
-  if (nullptr != name) {
-    std::cout << std::string(name) << std::endl;
-  }
+void DumpString(const char* name, const std::string& value, bool end_line);
 
-  const auto& shape = tensor.Shape();
-  auto num_items = shape.Size();
-
-  if (num_items == 0) {
-    std::cout << "no data";
-    return;
-  }
-
-  size_t num_dims = shape.NumDimensions();
-  size_t num_rows = 1;
-  if (num_dims > 1) {
-    num_rows = static_cast<size_t>(shape[0]);
-  }
-
-  size_t row_size = num_items / num_rows;
-
-  auto data = tensor.DataAsSpan<T>();
-
-  for (size_t row = 0; row < num_rows; ++row) {
-    SKIP_IF_TOO_MANY(num_rows, row, true);
-    std::cout << "[" << row << "]:";
-    for (size_t i = 0; i < row_size; ++i) {
-      SKIP_IF_TOO_MANY(row_size, i, false);
-
-      if (i > 0)
-        std::cout << ", ";
-
-      PrintValue(data[row * row_size + i]);
-    }
-    std::cout << "\n";
-  }
-
-  std::cout << std::endl;
-}
+void DumpTensor(const char* name, const Tensor& tensor);
 
 void DumpOrtValue(const char* name, const OrtValue& value);
 
@@ -106,10 +65,6 @@ void DumpTensor(const char* name, const T* tensor, int dim0, int dim1) {
     std::cout << std::endl;
   }
 }
-
-void DumpString(const char* name, int index, bool end_line);
-
-void DumpString(const char* name, std::string value, bool end_line);
 
 template <typename T>
 void DumpTensor(const char* name, const T* tensor, int dim0, int dim1, int dim2) {
@@ -138,6 +93,22 @@ void DumpTensor(const char* name, const T* tensor, int dim0, int dim1, int dim2)
   }
   std::cout << std::endl;
 }
+
+class CpuTensorConsoleDumper : public IConsoleDumper {
+ public:
+  CpuTensorConsoleDumper() = default;
+  virtual ~CpuTensorConsoleDumper() {}
+  void Disable() const override;
+  bool IsEnabled() const override;
+  void Print(const char* name, const float* tensor, int dim0, int dim1) const override;
+  void Print(const char* name, const int64_t* tensor, int dim0, int dim1) const override;
+  void Print(const char* name, const float* tensor, int dim0, int dim1, int dim2) const override;
+  void Print(const char* name, const int64_t* tensor, int dim0, int dim1, int dim2) const override;
+  void Print(const char* name, const Tensor& value) const override;
+  void Print(const char* name, const OrtValue& value) const override;
+  void Print(const char* name, int index, bool end_line) const override;
+  void Print(const char* name, const std::string& value, bool end_line) const override;
+};
 
 void ConfigureTensorDump();
 

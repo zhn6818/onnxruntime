@@ -186,21 +186,29 @@ Status GptSubgraph::Setup(const SessionState& session_state,
   return Status::OK();
 }
 
+const IExecutionProvider* GptSubgraph::GetProvider() const {
+  const ExecutionProviders& providers = session_state_->GetExecutionProviders();
+  const IExecutionProvider* cpu_provider = providers.Get(onnxruntime::kCpuExecutionProvider);
+  const IExecutionProvider* cuda_provider = providers.Get(onnxruntime::kCudaExecutionProvider);
+  const IExecutionProvider* provider = cuda_provider ? cuda_provider : cpu_provider;
+  return provider;
+}
+
 Status GptSubgraph::CreateInitialFeeds(
     const Tensor& input_ids,
     const std::vector<const OrtValue*>& implicit_inputs,
     int num_beams,
     int pad_token_id,
     gsl::span<int64_t>& next_positions,
+    OrtValue& expanded_input_ids,
     std::vector<OrtValue>& feeds,
-    const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func
+    const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func,
+    const BeamSearchDeviceHelper::AddToFeedsFunc& add_to_feeds_func,
+    IAllocatorUniquePtr<char>& buffer
     ) {
   ORT_ENFORCE(session_state_ != nullptr, "Setup must be called before CreateInitialFeeds");
 
-  const ExecutionProviders& providers = session_state_->GetExecutionProviders();
-  const IExecutionProvider* cpu_provider = providers.Get(onnxruntime::kCpuExecutionProvider);
-  const IExecutionProvider* cuda_provider = providers.Get(onnxruntime::kCudaExecutionProvider);
-  const IExecutionProvider* provider = cuda_provider ? cuda_provider : cpu_provider;
+  const IExecutionProvider* provider = GetProvider();
 
   const TensorShape& input_ids_shape = input_ids.Shape();
   ORT_ENFORCE(input_ids_shape.NumDimensions() == 2);
@@ -217,9 +225,8 @@ Status GptSubgraph::CreateInitialFeeds(
   AllocatorPtr cpu_alloactor = session_state_->GetAllocator(input_ids.Location());
 
   // Store allocator, which will be used in remaining feeds
-  allocator_ = cpu_alloactor;
-
   auto default_allocator = provider->GetAllocator(0, OrtMemTypeDefault);
+  allocator_ = default_allocator;
 
   // Initialize empty past state
   auto past_type = DataTypeImpl::GetType<float>();
@@ -231,8 +238,12 @@ Status GptSubgraph::CreateInitialFeeds(
   // The ordering is the same as used in Setup
   feeds.reserve(num_subgraph_inputs + num_implicit_inputs);
 
-  ORT_RETURN_IF_ERROR(create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, cpu_alloactor, feeds, provider));
+  OrtValue expanded_position_ids;
+  OrtValue expanded_attention_mask;
+  ORT_RETURN_IF_ERROR(create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, cpu_alloactor, expanded_input_ids, expanded_position_ids, expanded_attention_mask));
 
+  ORT_RETURN_IF_ERROR(add_to_feeds_func(provider, expanded_input_ids, expanded_position_ids, expanded_attention_mask, feeds, buffer));
+  
   // The remaing inputs are past state.
   for (int i = 3; i < num_subgraph_inputs; ++i) {
     feeds.push_back(empty_past);
@@ -241,122 +252,6 @@ Status GptSubgraph::CreateInitialFeeds(
   // pass in implicit inputs
   for (const auto* entry : implicit_inputs) {
     feeds.push_back(*entry);
-  }
-
-  return Status::OK();
-}
-
-// TODO: support float16
-void GptSubgraph::PickPastState(const std::vector<OrtValue>& last_outputs,
-                                std::vector<OrtValue>& next_inputs,
-                                gsl::span<const int64_t>& beam_indices) {
-  for (int i = 3; i < num_subgraph_inputs; ++i) {
-    const OrtValue& present = last_outputs[i - 2];  // shape is like (2, batch_beam_size, 12, past_seq_len, 64)
-    const TensorShape& past_shape = present.Get<Tensor>().Shape();
-
-    // Create a tensor with same shape.
-    OrtValue past;
-    auto past_type = DataTypeImpl::GetType<float>();
-    Tensor::InitOrtValue(past_type, past_shape, allocator_, past);
-
-    auto block_size_per_beam = past_shape[2] * past_shape[3] * past_shape[4];
-    auto past_key_size = past_shape[1] * past_shape[2] * past_shape[3] * past_shape[4];
-
-    gsl::span<float> past_span = past.GetMutable<Tensor>()->MutableDataAsSpan<float>();
-    gsl::span<const float> present_span = present.Get<Tensor>().DataAsSpan<float>();
-    for (gsl::index j = 0; j < beam_indices.length(); j++) {
-      int64_t beam_index = beam_indices[j];
-      gsl::span<const float> present_key = present_span.subspan(beam_index * block_size_per_beam, block_size_per_beam);
-      gsl::span<const float> present_value = present_span.subspan(past_key_size + beam_index * block_size_per_beam, block_size_per_beam);
-
-      gsl::span<float> past_key = past_span.subspan(j * block_size_per_beam, block_size_per_beam);
-      gsl::span<float> past_value = past_span.subspan(past_key_size + j * block_size_per_beam, block_size_per_beam);
-      gsl::copy(present_key, past_key);
-      gsl::copy(present_value, past_value);
-#ifdef DEBUG_BEAM_SEARCH
-      if (i == 3)  // only dump past_0
-      {
-        DumpString("past_key of beam", static_cast<int>(j), true);
-        DumpTensor<float>(nullptr, past_key.data(), 1, static_cast<int>(block_size_per_beam));
-
-        DumpString("past_value of beam", static_cast<int>(j), true);
-        DumpTensor<float>(nullptr, past_value.data(), 1, static_cast<int>(block_size_per_beam));
-      }
-#endif
-    }
-
-    next_inputs[i] = past;
-  }
-}
-
-Status GptSubgraph::UpdateFeeds(
-    const std::vector<OrtValue>& last_outputs,
-    std::vector<OrtValue>& next_inputs,
-    int current_length,
-    gsl::span<int64_t>& next_positions,
-    gsl::span<const int64_t> beam_next_tokens,
-    gsl::span<const int64_t> beam_indices,
-    int num_beams) {
-  // last_outputs: logits, present_0, present_1, ...
-  // next_inputs: input_ids, position_id, attention_mask, past_0, past_1
-
-  // The following updates inputs for subgraph
-  // TODO: Reuse buffer for input_ids and position_ids to reduce memory allocation.
-
-  // Update input_ids with next tokens.
-  int batch_beam_size = static_cast<int>(beam_next_tokens.length());
-  int64_t dims[] = {batch_beam_size, 1};
-  TensorShape input_ids_shape(&dims[0], 2);
-  auto element_type = DataTypeImpl::GetType<int64_t>();
-  OrtValue input_ids;
-  Tensor::InitOrtValue(element_type, input_ids_shape, allocator_, input_ids);
-  int64_t* input_ids_data = input_ids.GetMutable<Tensor>()->MutableData<int64_t>();
-  for (int i = 0; i < batch_beam_size; i++) {
-    input_ids_data[i] = beam_next_tokens[i];
-  }
-  next_inputs[0] = input_ids;
-
-  // Update position IDs
-  OrtValue position_ids;
-  Tensor::InitOrtValue(element_type, input_ids_shape, allocator_, position_ids);
-  int64_t* position_data = position_ids.GetMutable<Tensor>()->MutableData<int64_t>();
-  for (int i = 0; i < batch_beam_size; i++) {
-    position_data[i] = next_positions[i];
-    next_positions[i]++;
-  }
-  next_inputs[1] = position_ids;
-
-  // Update attention mask
-  const OrtValue& old_mask = next_inputs[2];
-  const float* old_mask_data = old_mask.Get<Tensor>().Data<float>();
-  int64_t mask_dims[] = {batch_beam_size, current_length};
-  TensorShape mask_shape(&mask_dims[0], 2);
-  OrtValue attention_mask;
-  auto mask_type = DataTypeImpl::GetType<float>();
-  Tensor::InitOrtValue(mask_type, mask_shape, allocator_, attention_mask);
-  float* mask_data = attention_mask.GetMutable<Tensor>()->MutableData<float>();
-  for (int i = 0; i < batch_beam_size; i++) {
-    for (int j = 0; j < current_length - 1; j++) {
-      mask_data[i * current_length + j] = old_mask_data[i * (current_length - 1) + j];
-    }
-    mask_data[i * current_length + current_length - 1] = 1.0f;
-  }
-  next_inputs[2] = attention_mask;
-
-#ifdef DEBUG_BEAM_SEARCH
-  DumpOrtValue("input_ids", input_ids);
-  DumpOrtValue("position_ids", position_ids);
-  DumpOrtValue("attention_mask", attention_mask);
-#endif
-
-  // Update past state
-  if (num_beams == 1) {
-    // feed present_* output to past_* inputs one by one
-    for (int i = 3; i < num_subgraph_inputs; ++i) {
-      next_inputs[i] = last_outputs[i - 2];
-    }
-  } else {
-    PickPastState(last_outputs, next_inputs, beam_indices);
   }
 
   return Status::OK();
