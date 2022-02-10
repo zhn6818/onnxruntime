@@ -4,7 +4,7 @@
 #ifdef DEBUG_NODE_INPUTS_OUTPUTS
 
 #include "core/framework/debug_node_inputs_outputs_utils.h"
-
+#include "core/framework/debug_utils.h"
 #include <iomanip>
 #include <cctype>
 #include <string>
@@ -67,42 +67,8 @@ std::ostream& operator<<(std::ostream& out, const MLFloat16& value) {
 }
 
 template <typename T>
-void DumpTensorToStdOut(const Tensor& tensor) {
-  const auto& shape = tensor.Shape();
-  auto num_items = shape.Size();
-
-  if (num_items == 0) {
-    std::cout << "no data";
-    return;
-  }
-
-  size_t num_dims = shape.NumDimensions();
-  size_t num_rows = 1;
-  if (num_dims > 1) {
-    num_rows = static_cast<size_t>(shape[0]);
-  }
-
-  size_t row_size = num_items / num_rows;
-
-  auto data = tensor.DataAsSpan<T>();
-
-  auto print_val = [](const T& value) {
-    if (std::is_floating_point<T>::value)
-      std::cout << std::setprecision(8) << value;
-    else
-      std::cout << value;
-  };
-
-  for (size_t row = 0; row < num_rows; ++row) {
-    print_val(data[row * row_size]);
-    for (size_t i = 1; i < row_size; ++i) {
-      std::cout << ", ";
-      print_val(data[row * row_size + i]);
-    }
-    std::cout << "\n";
-  }
-
-  std::cout << std::endl;
+void DumpTensorToStdOut(const Tensor& tensor, const NodeDumpOptions& dump_options) {
+  onnxruntime::utils::PrintCpuTensor<T>(tensor, dump_options.print_threshold, dump_options.print_edge_items);
 }
 
 PathString MakeTensorFileName(const std::string& tensor_name, const NodeDumpOptions& dump_options) {
@@ -341,7 +307,7 @@ void DumpCpuTensor(
     const Tensor& tensor, const TensorMetadata& tensor_metadata) {
   switch (dump_options.data_destination) {
     case NodeDumpOptions::DataDestination::StdOut: {
-      DispatchOnTensorType(tensor.DataType(), DumpTensorToStdOut, tensor);
+      DispatchOnTensorType(tensor.DataType(), DumpTensorToStdOut, tensor, dump_options);
       break;
     }
     case NodeDumpOptions::DataDestination::TensorProtoFiles: {
@@ -439,6 +405,10 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
     else if (destination != "stdout") {
       ORT_THROW("Unsupported data destination type: ", destination);
     }
+
+    // Summarization options for StdOut
+    opts.print_threshold = ParseEnvironmentVariableWithDefault<int>(env_vars::kPrintThreshold, 512);
+    opts.print_edge_items = ParseEnvironmentVariableWithDefault<int>(env_vars::kPrintEdgeItems, 3);
 
     if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kAppendRankToFileName, false)) {
       std::string rank = Env::Default().GetEnvironmentVar("OMPI_COMM_WORLD_RANK");
