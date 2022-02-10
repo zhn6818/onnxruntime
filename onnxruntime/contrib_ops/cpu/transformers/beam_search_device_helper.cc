@@ -379,7 +379,7 @@ void PickPastState(const std::vector<OrtValue>& last_outputs,
 #endif
     }
 
-    next_inputs[i] = past;
+    next_inputs[i + 2] = past;
   }
 }
 
