@@ -99,11 +99,11 @@ Status AddToFeeds(const IExecutionProvider* execution_provider,
   ORT_ENFORCE(shape.NumDimensions() == 2);
   const int64_t elements = shape[0] * shape[1];
 
-  AllocatorPtr allocator = provider->GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
+  AllocatorPtr pinned_allocator = provider->GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
   cudaStream_t stream = static_cast<cudaStream_t>(provider->GetComputeStream());
 
   size_t bytes = (sizeof(int64_t) + sizeof(int64_t) + sizeof(float)) * elements;
-  auto pinned_buffer = IAllocator::MakeUniquePtr<void>(allocator, bytes);
+  auto pinned_buffer = IAllocator::MakeUniquePtr<void>(pinned_allocator, bytes);
   char* pinned_data = static_cast<char*>(pinned_buffer.get());
 
   // Copy tensors to one pinned memory buffer (so that we only need copy to GPU once)
@@ -125,12 +125,14 @@ Status AddToFeeds(const IExecutionProvider* execution_provider,
   CUDA_RETURN_IF_ERROR(cudaEventRecord(isCopyDone, stream));
   CUDA_RETURN_IF_ERROR(cudaEventSynchronize(isCopyDone));
 
+  // TODO: allocate a buffer for subgraph inputs so that we can reuse the buffer in each subgraph call.
   OrtValue device_input_ids;
   OrtValue device_position_ids;
   OrtValue device_attention_mask;
-  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data, allocator->Info(), device_input_ids);
-  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data + sizeof(int64_t) * elements, allocator->Info(), device_position_ids);
-  Tensor::InitOrtValue(DataTypeImpl::GetType<float>(), shape, gpu_data + 2 * sizeof(int64_t) * elements, allocator->Info(), device_attention_mask);
+  const OrtMemoryInfo& location = provider->GetAllocator(0, OrtMemTypeDefault)->Info();
+  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data, location, device_input_ids);
+  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, gpu_data + sizeof(int64_t) * elements, location, device_position_ids);
+  Tensor::InitOrtValue(DataTypeImpl::GetType<float>(), shape, gpu_data + 2 * sizeof(int64_t) * elements, location, device_attention_mask);
 
   feeds.push_back(device_input_ids);
   feeds.push_back(device_position_ids);
@@ -205,6 +207,10 @@ Status ProcessLogits(const OrtValue& logits,                                    
   int batch_beam_size = batch_size * num_beams;
   const float* logits_data = logits.Get<Tensor>().Data<float>();
 
+#ifdef DEBUG_BEAM_SEARCH
+  dumper->Print("logits", logits);
+#endif
+
   // Logits has shape (batch_size * num_beams, input_length, vocab_size),
   // where input_length equals to parameters_->sequence_length for first subgraph call, and 1 for the remaining calls.
   const TensorShape& logits_shape = logits.Get<Tensor>().Shape();
@@ -229,7 +235,6 @@ Status ProcessLogits(const OrtValue& logits,                                    
   }
 
 #ifdef DEBUG_BEAM_SEARCH
-  dumper->Print("logits", logits);
   dumper->Print("next_token_logits", next_token_logits.data(), batch_size, num_beams, vocab_size);
 #endif
 

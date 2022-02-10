@@ -138,7 +138,10 @@ Status GptSubgraph::Setup(const SessionState& session_state,
 
   // First, get the location of input_ids of current operator.
   const auto& node_inputs = node.InputDefs();
-  const OrtMemoryInfo& input_ids_location = utils::FindMemoryInfoForValue(session_state, node_inputs[0]->Name());
+
+  // Currently, input_ids is in CPU even for CUDA operator, so we have to use logits location as default.
+  // const OrtMemoryInfo& input_ids_location = utils::FindMemoryInfoForValue(session_state, node_inputs[0]->Name());
+  const OrtMemoryInfo& default_location = utils::FindMemoryInfoForValue(subgraph_session_state, "logits");
 
   // position_ids, attention_mask, past_0, ... are created by this operator so the name doesn't matter.
   // as we skip them when we call FindDevicesForValues, and default them to be in the same device as input_ids
@@ -156,7 +159,7 @@ Status GptSubgraph::Setup(const SessionState& session_state,
       const auto& location = utils::FindMemoryInfoForValue(session_state, feed_names[i]);
       feed_locations[i] = location.device;
     } else {
-      feed_locations[i] = input_ids_location.device;
+      feed_locations[i] = default_location.device;
     }
   }
 
@@ -171,7 +174,7 @@ Status GptSubgraph::Setup(const SessionState& session_state,
 
   // past state need to be where we can feed them in to the next iteration, so set the fetch location to match the feed location.
   for (int i = 0; i < num_subgraph_outputs; ++i) {
-    fetch_locations.push_back(&input_ids_location);
+    fetch_locations.push_back(&default_location);
   }
 
   utils::FinalizeFeedFetchCopyInfo(*ffm, feed_locations, fetch_locations);
