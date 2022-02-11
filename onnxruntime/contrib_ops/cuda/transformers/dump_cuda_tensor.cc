@@ -108,6 +108,7 @@ void DumpGpuTensor(const char* name, const Tensor& tensor) {
     int dim1 = static_cast<int>(shape[num_dims - 2]);
     int dim2 = static_cast<int>(shape[num_dims - 1]);
     DumpGpuTensor(name, tensor, dim0, dim1, dim2);
+    return;
   }
 
   auto num_items = shape.Size();
