@@ -143,7 +143,7 @@ Status AddToFeeds(const IExecutionProvider* execution_provider,
 
 void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
                    transformers::IBeamSearchCpuState<float>* cpu_state,
-                   gsl::span<int64_t>& next_positions_in_cpu,
+                   gsl::span<int64_t>& sequence_lengths,
                    int batch_size,
                    int num_beams,
                    gsl::span<const int64_t> input_ids_in_cpu,
@@ -158,19 +158,12 @@ void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
   cudaMemsetAsync(beam_state->next_indices.data(), 0, beam_state->next_indices.size_bytes(), cuda_stream);
 
   // Initialize score of first beam of each group with 0 and the rest with -1e9.
-  //cuda::LaunchInitKernel(beam_state->beam_scores.data(), batch_size, num_beams, reinterpret_cast<cudaStream_t>(stream));
-  gsl::span<float>& beam_scores = cpu_state->beam_scores;
-  memset(beam_scores.data(), 0, beam_scores.size_bytes());
-  for (int i = 0; i < batch_size; i++) {
-    for (int j = 1; j < num_beams; j++) {
-      beam_scores[i * num_beams + j] = -1e9; // This value exceeds MLFloat16 limit so it is for float only.
-    }
-  }
+  cuda::LaunchInitKernel(beam_state->beam_scores.data(), batch_size, num_beams, reinterpret_cast<cudaStream_t>(stream));
 
   // copy sequence lengths to GPU
   // since next_positions is only needed to update feeds after subgraph execution, so it is fine to use Async here.
   // cudaMemsetAsync(beam_state->next_positions.data(), 0, beam_state->next_positions.size_bytes(), cuda_stream);
-  cudaMemcpyAsync(beam_state->next_positions.data(), next_positions_in_cpu.data(), next_positions_in_cpu.size_bytes(), cudaMemcpyHostToDevice, cuda_stream);
+  cudaMemcpyAsync(beam_state->next_positions.data(), sequence_lengths.data(), sequence_lengths.size_bytes(), cudaMemcpyHostToDevice, cuda_stream);
 
 
   memset(cpu_state->sequences_space.data(), 0, cpu_state->sequences_space.size_bytes());

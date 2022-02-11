@@ -70,7 +70,7 @@ Status CreateInputs(
     const Tensor* original_input_ids,
     int num_beams,
     int pad_token_id,
-    gsl::span<int64_t>& next_positions,
+    gsl::span<int64_t>& sequence_lengths,
     AllocatorPtr alloactor,
     OrtValue& expanded_input_ids,
     OrtValue& expanded_position_ids,
@@ -125,7 +125,7 @@ Status CreateInputs(
     }
 
     for (int k = 0; k < num_beams; k++) {
-      next_positions[i * num_beams + k] = abs_position;
+      sequence_lengths[i * num_beams + k] = abs_position;
     }
   }
 
@@ -152,7 +152,7 @@ Status AddToFeeds(const IExecutionProvider* /*execution_provider*/,
 
 void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
                    transformers::IBeamSearchCpuState<float>* cpu_state,
-                   gsl::span<int64_t>& next_positions_in_cpu,
+                   gsl::span<int64_t>& sequence_lengths,
                    int batch_size,
                    int num_beams,
                    gsl::span<const int64_t> input_ids_in_cpu,
@@ -171,11 +171,11 @@ void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
   gsl::span<float>& beam_scores = beam_state->beam_scores;
   for (int i = 0; i < batch_size; i++) {
     for (int j = 1; j < num_beams; j++) {
-      beam_scores[i * num_beams + j] = -1e9;  // This value exceeds MLFloat16 limit so it is for float only.
+      beam_scores[i * num_beams + j] = -1e9;
     }
   }
 
-  gsl::copy(next_positions_in_cpu, beam_state->next_positions);
+  gsl::copy(sequence_lengths, beam_state->next_positions);
 
   memset(cpu_state->sequences_space.data(), 0, cpu_state->sequences_space.size_bytes());
 

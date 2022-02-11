@@ -22,19 +22,19 @@ struct IBeamSearchState {
   gsl::span<int64_t> next_tokens;     // shape (batch_size, 2 * num_beams)
   gsl::span<int64_t> next_indices;    // shape (batch_size, 2 * num_beams)
   gsl::span<int64_t> next_positions;  // shape (batch_size, num_beams). Next position value for position_ids.
-  gsl::span<T> beam_scores;            // shape (batch_size, num_beams)
+  gsl::span<T> beam_scores;           // shape (batch_size, num_beams)
   gsl::span<T> scores;                // shape (max_length - sequence_length + 1, batch_size, num_beams * vocab_size)
-  gsl::span<T> remaining_scores;      // subspan that is avaiable for appending next token scores.
+  gsl::span<T> remaining_scores;      // portion of scores that is avaiable for appending next token scores.
 };
 
 // Data that copied from GPU to CPU
 template <typename T>
 struct IBeamSearchCpuState {
-  gsl::span<int64_t> next_positions;
-  gsl::span<T> topk_scores;
-  gsl::span<int64_t> topk_tokens;
-  gsl::span<int64_t> topk_indices;
-  gsl::span<T> beam_scores;            // shape (batch_size, num_beams)
+  gsl::span<int64_t> sequence_lengths; // shape (batch_size, num_beams), initial sequence length
+  gsl::span<T> topk_scores;            // shape (batch_size, 2*num_beams), scores of topk candidates (K=2*num_beams)
+  gsl::span<int64_t> topk_tokens;      // shape (batch_size, 2*num_beams), tokens of topk candidates
+  gsl::span<int64_t> topk_indices;     // shape (batch_size, 2*num_beams), beam indices of topk candidates
+  gsl::span<T> final_beam_scores;      // shape (batch_size, num_beams)
   gsl::span<int64_t> sequences_space;  // shape (2, batch_size, num_beams, max_seq_length)
 };
 

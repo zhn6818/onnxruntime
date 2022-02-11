@@ -34,7 +34,7 @@ Status AddToFeeds(const IExecutionProvider* execution_provider,
 
 void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
                    transformers::IBeamSearchCpuState<float>* cpu_state,
-                   gsl::span<int64_t>& next_positions_in_cpu,
+                   gsl::span<int64_t>& sequence_lengths,
                    int batch_size,
                    int num_beams,
                    gsl::span<const int64_t> input_ids_in_cpu,

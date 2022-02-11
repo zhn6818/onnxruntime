@@ -202,7 +202,7 @@ Status GptSubgraph::CreateInitialFeeds(
     const std::vector<const OrtValue*>& implicit_inputs,
     int num_beams,
     int pad_token_id,
-    gsl::span<int64_t>& next_positions,
+    gsl::span<int64_t>& sequence_lengths,
     OrtValue& expanded_input_ids,
     std::vector<OrtValue>& feeds,
     const BeamSearchDeviceHelper::CreateInputsFunc& create_inputs_func,
@@ -243,7 +243,7 @@ Status GptSubgraph::CreateInitialFeeds(
 
   OrtValue expanded_position_ids;
   OrtValue expanded_attention_mask;
-  ORT_RETURN_IF_ERROR(create_inputs_func(&input_ids, num_beams, pad_token_id, next_positions, cpu_alloactor, expanded_input_ids, expanded_position_ids, expanded_attention_mask));
+  ORT_RETURN_IF_ERROR(create_inputs_func(&input_ids, num_beams, pad_token_id, sequence_lengths, cpu_alloactor, expanded_input_ids, expanded_position_ids, expanded_attention_mask));
 
   ORT_RETURN_IF_ERROR(add_to_feeds_func(provider, expanded_input_ids, expanded_position_ids, expanded_attention_mask, feeds, buffer));
   

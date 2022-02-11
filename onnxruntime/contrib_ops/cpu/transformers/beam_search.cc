@@ -101,17 +101,17 @@ struct BeamSearchCpuState : public IBeamSearchCpuState<T> {
   Sequences sequences;
 
   void Init(AllocatorPtr allocator, size_t batch_beam_size, int max_length) {
-    next_positions = AllocateBuffer<int64_t>(allocator, next_positions_buffer_, batch_beam_size);
+    sequence_lengths = AllocateBuffer<int64_t>(allocator, sequence_lengths_buffer_, batch_beam_size);
     topk_scores = AllocateBuffer<T>(allocator, topk_scores_buffer_, 2 * batch_beam_size);
     topk_tokens = AllocateBuffer<int64_t>(allocator, topk_tokens_buffer_, 2 * batch_beam_size);
     topk_indices = AllocateBuffer<int64_t>(allocator, topk_indices_buffer_, 2 * batch_beam_size);
-    beam_scores = AllocateBuffer<T>(allocator, beam_scores_buffer_, batch_beam_size);
+    final_beam_scores = AllocateBuffer<T>(allocator, final_beam_scores_buffer_, batch_beam_size);
     sequences_space = AllocateBuffer<int64_t>(allocator, sequences_space_buffer_, SafeInt<size_t>(2) * batch_beam_size * max_length);
   }
 
  private:
-  BufferUniquePtr beam_scores_buffer_;
-  BufferUniquePtr next_positions_buffer_;
+  BufferUniquePtr final_beam_scores_buffer_;
+  BufferUniquePtr sequence_lengths_buffer_;
   BufferUniquePtr topk_scores_buffer_;
   BufferUniquePtr topk_tokens_buffer_;
   BufferUniquePtr topk_indices_buffer_;
@@ -173,7 +173,7 @@ class BeamSearchImpl {
   Status CheckInputs(const OpKernelContextInternal& context);
 
   // Prepare the inputs for first inference of subgraph
-  Status CreateInitialFeeds(gsl::span<int64_t>& next_positions, OrtValue& expanded_input_ids, std::vector<OrtValue>& feeds, IAllocatorUniquePtr<char>& buffer);
+  Status CreateInitialFeeds(gsl::span<int64_t>& sequence_lengths, OrtValue& expanded_input_ids, std::vector<OrtValue>& feeds, IAllocatorUniquePtr<char>& buffer);
 
   // Update the input for next iteration.
   Status UpdateFeeds(
@@ -369,10 +369,10 @@ Status BeamSearchImpl<T>::Initialize() {
 }
 
 template <typename T>
-Status BeamSearchImpl<T>::CreateInitialFeeds(gsl::span<int64_t>& next_positions, OrtValue& expanded_input_ids, std::vector<OrtValue>& feeds, IAllocatorUniquePtr<char>& buffer) {
+Status BeamSearchImpl<T>::CreateInitialFeeds(gsl::span<int64_t>& sequence_lengths, OrtValue& expanded_input_ids, std::vector<OrtValue>& feeds, IAllocatorUniquePtr<char>& buffer) {
   const OrtValue* input_ids_value = context_.GetInputOrtValue(0);
   const Tensor& input_ids = input_ids_value->Get<Tensor>();
-  return gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, next_positions, expanded_input_ids, feeds, create_inputs_func_, add_to_feeds_func_, buffer);
+  return gpt_subgraph_.CreateInitialFeeds(input_ids, implicit_inputs_, parameters_->num_beams, parameters_->pad_token_id, sequence_lengths, expanded_input_ids, feeds, create_inputs_func_, add_to_feeds_func_, buffer);
 }
 
 template <typename T>
@@ -397,11 +397,9 @@ Status BeamSearchImpl<T>::GenerateNextToken(
   ORT_RETURN_IF_ERROR(ProcessLogits(logits, beam_state, cpu_state, temp_space_allocator_));
 
   gsl::span<T>& beam_scores = beam_scorer_->GetNextScores();
-  // It is optional to clone beam_scores. Change it to use same buffer also works:
+  // It is optional to clone beam_scores. Change it to use same buffer also works for CPU:
   //    beam_state.beam_scores = beam_scores
   // Here we make a copy to reduce the coupling with little cost (the buffer size is small).
-  // gsl::copy(beam_scores, cpu_state.beam_scores);
-
   device_copy_func_(beam_state.beam_scores, beam_scores, stream_, DeviceCopyDirection::hostToDevice);
 
   beam_next_tokens = beam_scorer_->GetNextTokens();
@@ -481,7 +479,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
   // IAllocatorUniquePtr<char> buffer = gpt_subgraph_.GetProvider()->GetScratchBuffer<char>(buffer_bytes);
   IAllocatorUniquePtr<char> buffer;
   OrtValue expanded_input_ids_in_cpu;
-  ORT_RETURN_IF_ERROR(CreateInitialFeeds(cpu_state.next_positions, expanded_input_ids_in_cpu, feeds, buffer));
+  ORT_RETURN_IF_ERROR(CreateInitialFeeds(cpu_state.sequence_lengths, expanded_input_ids_in_cpu, feeds, buffer));
 
   BeamSearchState<T> beam_state;
   beam_state.Init(temp_space_allocator_,
@@ -500,7 +498,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
   gsl::span<const int64_t> input_ids = expanded_input_ids_in_cpu.Get<Tensor>().DataAsSpan<int64_t>();
   init_beam_state_func_(&beam_state,
                         &cpu_state,
-                        cpu_state.next_positions,
+                        cpu_state.sequence_lengths,
                         parameters_->batch_size,
                         parameters_->num_beams,
                         input_ids,
@@ -556,14 +554,14 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
 #endif
   }
 
-  gsl::span<const T> beam_scores(beam_state.beam_scores.data(), beam_state.beam_scores.size());
+  gsl::span<const T> final_beam_scores(beam_state.beam_scores.data(), beam_state.beam_scores.size());
   if (IsCuda()) {
-    device_copy_func_(cpu_state.beam_scores, beam_scores, stream_, DeviceCopyDirection::deviceToHost);
-    beam_scores = gsl::make_span<const T>(cpu_state.beam_scores.data(), cpu_state.beam_scores.size());
+    device_copy_func_(cpu_state.final_beam_scores, final_beam_scores, stream_, DeviceCopyDirection::deviceToHost);
+    final_beam_scores = gsl::make_span<const T>(cpu_state.final_beam_scores.data(), cpu_state.final_beam_scores.size());
   }
 
   beam_scorer_->Finalize(&(cpu_state.sequences),
-                         beam_scores,
+                         final_beam_scores,
                          output_sequences,
                          output_sequences_scores);
 
