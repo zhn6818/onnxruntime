@@ -65,7 +65,7 @@ Status UpdateFeeds(
     const std::vector<OrtValue>& last_outputs,
     std::vector<OrtValue>& next_inputs,
     int current_length,
-    gsl::span<int64_t>& next_positions,
+    OrtValue& position_ids,
     gsl::span<const int64_t> beam_next_tokens,
     gsl::span<const int64_t> beam_indices,
     int num_beams,

@@ -389,7 +389,7 @@ Status UpdateFeeds(
     const std::vector<OrtValue>& last_outputs,
     std::vector<OrtValue>& next_inputs,
     int current_length,
-    gsl::span<int64_t>& next_positions,
+    OrtValue& position_ids,
     gsl::span<const int64_t> beam_next_tokens,
     gsl::span<const int64_t> beam_indices,
     int num_beams,
@@ -398,7 +398,6 @@ Status UpdateFeeds(
   // next_inputs: input_ids, position_id, attention_mask, past_0, past_1
 
   // The following updates inputs for subgraph
-  // TODO: Reuse buffer for input_ids and position_ids to reduce memory allocation.
 
   // Update input_ids with next tokens.
   int batch_beam_size = static_cast<int>(beam_next_tokens.length());
@@ -406,6 +405,7 @@ Status UpdateFeeds(
   TensorShape input_ids_shape(&dims[0], 2);
   auto element_type = DataTypeImpl::GetType<int64_t>();
   OrtValue input_ids;
+  // TODO: Reuse buffer for input_ids to reduce memory allocation.
   Tensor::InitOrtValue(element_type, input_ids_shape, allocator, input_ids);
   int64_t* input_ids_data = input_ids.GetMutable<Tensor>()->MutableData<int64_t>();
   for (int i = 0; i < batch_beam_size; i++) {
@@ -414,12 +414,9 @@ Status UpdateFeeds(
   next_inputs[0] = input_ids;
 
   // Update position IDs
-  OrtValue position_ids;
-  Tensor::InitOrtValue(element_type, input_ids_shape, allocator, position_ids);
   int64_t* position_data = position_ids.GetMutable<Tensor>()->MutableData<int64_t>();
   for (int i = 0; i < batch_beam_size; i++) {
-    position_data[i] = next_positions[i];
-    next_positions[i]++;
+    position_data[i]++;
   }
   next_inputs[1] = position_ids;
 

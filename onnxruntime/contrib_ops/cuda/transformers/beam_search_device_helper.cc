@@ -386,7 +386,7 @@ Status UpdateFeeds(
     const std::vector<OrtValue>& last_outputs,
     std::vector<OrtValue>& next_inputs,
     int current_length,
-    gsl::span<int64_t>& next_positions,
+    OrtValue& position_ids,
     gsl::span<const int64_t> beam_next_tokens,
     gsl::span<const int64_t> beam_indices,
     int num_beams,
@@ -404,10 +404,7 @@ Status UpdateFeeds(
   next_inputs[0] = input_ids;
 
   // Update position IDs
-  OrtValue position_ids;
-  Tensor::InitOrtValue(element_type, input_ids_shape, allocator, position_ids);
   int64_t* position_data = position_ids.GetMutable<Tensor>()->MutableData<int64_t>();
-  cudaMemcpyAsync(position_data, next_positions.data(), next_positions.size_bytes(), cudaMemcpyDeviceToDevice, reinterpret_cast<cudaStream_t>(stream));
   next_inputs[1] = position_ids;
 
   // Update attention mask
@@ -422,7 +419,7 @@ Status UpdateFeeds(
 
   // Launch kernel to update like the following:
   //  for (int i = 0; i < batch_beam_size; i++) {
-  //    next_positions[i]++;
+  //    position_data[i]++;
   //  }
   //
   //  for (int i = 0; i < batch_beam_size; i++) {
@@ -431,7 +428,7 @@ Status UpdateFeeds(
   //    }
   //    mask_data[i * current_length + current_length - 1] = 1.0f;
   //  }
-  cuda::LaunchUpdateKernel<float>(old_mask_data, mask_data, next_positions.data(), batch_beam_size, current_length, reinterpret_cast<cudaStream_t>(stream));
+  cuda::LaunchUpdateKernel<float>(old_mask_data, mask_data, position_data, batch_beam_size, current_length, reinterpret_cast<cudaStream_t>(stream));
 
   next_inputs[2] = attention_mask;
 

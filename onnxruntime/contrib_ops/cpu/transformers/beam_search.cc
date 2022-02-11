@@ -55,7 +55,6 @@ namespace contrib {
 REGISTER_KERNEL_TYPED(float)
 
 namespace transformers {
-
 template <typename T>
 struct BeamSearchState : public IBeamSearchState<T> {
   void Init(AllocatorPtr allocator,
@@ -180,7 +179,7 @@ class BeamSearchImpl {
       const std::vector<OrtValue>& last_outputs,
       std::vector<OrtValue>& next_inputs,
       int current_length,
-      gsl::span<int64_t>& next_positions,
+      OrtValue& position_ids,
       gsl::span<const int64_t> beam_next_tokens,
       gsl::span<const int64_t> beam_indices);
 
@@ -425,10 +424,10 @@ Status BeamSearchImpl<T>::UpdateFeeds(
     const std::vector<OrtValue>& last_outputs,
     std::vector<OrtValue>& next_inputs,
     int current_length,
-    gsl::span<int64_t>& next_positions,
+    OrtValue& position_ids,
     gsl::span<const int64_t> beam_next_tokens,
     gsl::span<const int64_t> beam_indices) {
-  return update_feeds_func_(temp_space_allocator_, stream_, last_outputs, next_inputs, current_length, next_positions,
+  return update_feeds_func_(temp_space_allocator_, stream_, last_outputs, next_inputs, current_length, position_ids,
                             beam_next_tokens, beam_indices, parameters_->num_beams, GetConsoleDumper());
 }
 
@@ -513,6 +512,12 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
   dumper->Print("attention_mask", feeds[2]);
 #endif
 
+  // position ids for all iterations except the first. It uses memory buffer owned by next_positions.
+  OrtValue position_ids;
+  int64_t dims[] = {parameters_->BatchBeamSize(), 1};
+  TensorShape shape(&dims[0], 2);
+  Tensor::InitOrtValue(DataTypeImpl::GetType<int64_t>(), shape, beam_state.next_positions.data(), temp_space_allocator->Info(), position_ids);
+
   int current_length = parameters_->sequence_length;
   while (current_length < parameters_->max_length) {
 #ifdef DEBUG_BEAM_SEARCH
@@ -541,7 +546,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
     // Prepare inputs for next round of subgraph call.
     if (current_length < parameters_->max_length) {
       ORT_RETURN_IF_ERROR(UpdateFeeds(fetches, feeds, current_length,
-                                      beam_state.next_positions,
+                                      position_ids,
                                       beam_next_tokens.as_span<const int64_t>(),
                                       beam_indices.as_span<const int64_t>()));
     }
