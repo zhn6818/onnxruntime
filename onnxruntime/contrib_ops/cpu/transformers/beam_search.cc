@@ -549,7 +549,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
 
 #ifdef DEBUG_BEAM_SEARCH
     if (current_length - parameters_->sequence_length == 3) {  // only dump a few steps.
-      dumper->Disable();
+      const_cast<IConsoleDumper*>(dumper)->Disable();
     }
 #endif
   }

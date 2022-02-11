@@ -26,7 +26,7 @@ void NextTokenScores<T>::SetScore(int token_id, T score) {
 #ifdef DEBUG_BEAM_SEARCH
 template <typename T>
 void DumpScores(const char* name, gsl::span<T>& scores) {
-  DumpString(name, 0, true);
+  ORT_UNUSED_PARAMETER(name);
   ORT_UNUSED_PARAMETER(scores);
 }
 #endif

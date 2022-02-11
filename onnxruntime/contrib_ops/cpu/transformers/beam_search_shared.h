@@ -104,9 +104,10 @@ struct IBeamSearchParameters {
 
 class IConsoleDumper {
  public:
+  IConsoleDumper() : is_enabled_(true) {}
   virtual ~IConsoleDumper() {}
-  virtual void Disable() const = 0;
-  virtual bool IsEnabled() const = 0;
+  void Disable() { is_enabled_ = false; }
+  bool IsEnabled() const { return is_enabled_; }
   virtual void Print(const char* name, const float* tensor, int dim0, int dim1) const = 0;
   virtual void Print(const char* name, const int64_t* tensor, int dim0, int dim1) const = 0;
   virtual void Print(const char* name, const float* tensor, int dim0, int dim1, int dim2) const = 0;
@@ -115,6 +116,9 @@ class IConsoleDumper {
   virtual void Print(const char* name, const OrtValue& value) const = 0;
   virtual void Print(const char* name, int index, bool end_line) const = 0;
   virtual void Print(const char* name, const std::string& value, bool end_line) const = 0;
+
+ protected:
+  bool is_enabled_;
 };
 
 }  // namespace transformers

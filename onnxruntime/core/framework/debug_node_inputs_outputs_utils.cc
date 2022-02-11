@@ -68,7 +68,7 @@ std::ostream& operator<<(std::ostream& out, const MLFloat16& value) {
 
 template <typename T>
 void DumpTensorToStdOut(const Tensor& tensor, const NodeDumpOptions& dump_options) {
-  onnxruntime::utils::PrintCpuTensor<T>(tensor, dump_options.print_threshold, dump_options.print_edge_items);
+  onnxruntime::utils::PrintCpuTensor<T>(tensor, dump_options.snippet_threshold, dump_options.snippet_edge_items);
 }
 
 PathString MakeTensorFileName(const std::string& tensor_name, const NodeDumpOptions& dump_options) {
@@ -407,8 +407,8 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
     }
 
     // Summarization options for StdOut
-    opts.print_threshold = ParseEnvironmentVariableWithDefault<int>(env_vars::kPrintThreshold, 512);
-    opts.print_edge_items = ParseEnvironmentVariableWithDefault<int>(env_vars::kPrintEdgeItems, 3);
+    opts.snippet_threshold = ParseEnvironmentVariableWithDefault<int>(env_vars::kSnippetThreshold, kDefaultSnippetThreshold);
+    opts.snippet_edge_items = ParseEnvironmentVariableWithDefault<int>(env_vars::kSnippetEdgeItems, kDefaultSnippetEdgeItems);
 
     if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kAppendRankToFileName, false)) {
       std::string rank = Env::Default().GetEnvironmentVar("OMPI_COMM_WORLD_RANK");
