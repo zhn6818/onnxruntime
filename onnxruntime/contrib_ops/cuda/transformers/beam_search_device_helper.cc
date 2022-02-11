@@ -200,10 +200,6 @@ Status ProcessLogits(const OrtValue& logits,                                    
   int batch_beam_size = batch_size * num_beams;
   const float* logits_data = logits.Get<Tensor>().Data<float>();
 
-#ifdef DEBUG_BEAM_SEARCH
-  dumper->Print("logits", logits);
-#endif
-
   // Logits has shape (batch_size * num_beams, input_length, vocab_size),
   // where input_length equals to parameters_->sequence_length for first subgraph call, and 1 for the remaining calls.
   const TensorShape& logits_shape = logits.Get<Tensor>().Shape();
@@ -228,6 +224,7 @@ Status ProcessLogits(const OrtValue& logits,                                    
   }
 
 #ifdef DEBUG_BEAM_SEARCH
+  //dumper->Print("logits", logits);
   dumper->Print("next_token_logits", next_token_logits.data(), batch_size, num_beams, vocab_size);
 #endif
 
