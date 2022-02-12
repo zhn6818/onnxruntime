@@ -165,7 +165,7 @@ void UpdateInputsKernel(const T* old_mask_data,
     //     next_positions[i]++;
     //   }
     if (index < batch_beam_size) {
-      next_positions[i]++;
+      next_positions[index]++;
     }
   }
 }
