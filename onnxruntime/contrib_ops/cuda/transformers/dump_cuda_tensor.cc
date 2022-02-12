@@ -49,9 +49,9 @@ void DumpGpuTensor(const char* name, const T* tensor, int dim0, int dim1) {
   }
 
   if (onnxruntime::utils::kDefaultSnippetThreshold < static_cast<int64_t>(num_items)) {
-    onnxruntime::utils::PrintCpuTensorSnippet<T>(tensor, dim0, dim1, onnxruntime::utils::kDefaultSnippetEdgeItems);
+    onnxruntime::utils::PrintCpuTensorSnippet<T>(*data, dim0, dim1, onnxruntime::utils::kDefaultSnippetEdgeItems);
   } else {
-    onnxruntime::utils::PrintCpuTensorFull<T>(tensor, dim0, dim1);
+    onnxruntime::utils::PrintCpuTensorFull<T>(*data, dim0, dim1);
   }
 }
 
@@ -67,9 +67,9 @@ void DumpGpuTensor(const char* name, const T* tensor, int dim0, int dim1, int di
   }
 
   if (onnxruntime::utils::kDefaultSnippetThreshold < static_cast<int64_t>(num_items)) {
-    onnxruntime::utils::PrintCpuTensorSnippet<T>(tensor, dim0, dim1, dim2, onnxruntime::utils::kDefaultSnippetEdgeItems);
+    onnxruntime::utils::PrintCpuTensorSnippet<T>(*data, dim0, dim1, dim2, onnxruntime::utils::kDefaultSnippetEdgeItems);
   } else {
-    onnxruntime::utils::PrintCpuTensorFull<T>(tensor, dim0, dim1, dim2);
+    onnxruntime::utils::PrintCpuTensorFull<T>(*data, dim0, dim1, dim2);
   }
 }
 
