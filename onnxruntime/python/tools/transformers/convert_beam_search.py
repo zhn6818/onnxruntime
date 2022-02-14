@@ -189,6 +189,7 @@ def gpt2_to_onnx(args):
         if args.force_fp16_initializers:
             arguments.append('--force_fp16_initializers')
 
+    # TODO: change input_ids, postion_ids and attention_mask to int32 data type
     convert_gpt2_to_onnx(arguments)
 
 
@@ -204,11 +205,16 @@ def shape_inference(gpt2_onnx_path):
 
 
 def create_ort_session(model_path, use_gpu):
-    from onnxruntime import SessionOptions, InferenceSession, __version__ as ort_version, GraphOptimizationLevel
+    from onnxruntime import SessionOptions, InferenceSession, __version__ as ort_version, GraphOptimizationLevel, get_available_providers
     sess_options = SessionOptions()
     sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
     execution_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if use_gpu else ['CPUExecutionProvider']
-
+    if use_gpu:
+        if 'CUDAExecutionProvider' not in get_available_providers():
+            raise RuntimeError("CUDAExecutionProvider is not avaiable for --use_gpu!")
+        else:
+            print("use CUDAExecutionProvider")
+    
     ort_session = InferenceSession(model_path, sess_options, providers=execution_providers)
     return ort_session
 
