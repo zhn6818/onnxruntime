@@ -229,7 +229,7 @@ Status ProcessLogits(const OrtValue& logits,                                    
   }
 
 #ifdef DEBUG_BEAM_SEARCH
-  // dumper->Print("logits", logits);
+  dumper->Print("logits", logits);
   dumper->Print("next_token_logits", next_token_logits.data(), batch_size, num_beams, vocab_size);
 #endif
 
@@ -331,9 +331,10 @@ Status ProcessLogits(const OrtValue& logits,                                    
   return Status::OK();
 }
 
-void DeviceCopy(gsl::span<float> target, gsl::span<const float> source, void* /*stream*/, int /*copyDirection*/) {
+Status DeviceCopy(gsl::span<float> target, gsl::span<const float> source, void* /*stream*/, int /*copyDirection*/) {
   // assert(target.length() == source.length());
   gsl::copy(source, target);
+  return Status::OK();
 }
 
 void PickPastState(const std::vector<OrtValue>& last_outputs,
@@ -368,14 +369,13 @@ void PickPastState(const std::vector<OrtValue>& last_outputs,
       gsl::copy(present_value, past_value);
 
 #ifdef DEBUG_BEAM_SEARCH
-      if (i == 1)  // only dump past_0
-      {
-        dumper->Print("past_key of beam", static_cast<int>(j), true);
-        dumper->Print(nullptr, past_key.data(), 1, static_cast<int>(block_size_per_beam));
-
-        dumper->Print("past_value of beam", static_cast<int>(j), true);
-        dumper->Print(nullptr, past_value.data(), 1, static_cast<int>(block_size_per_beam));
-      }
+      // if (i == 1)  // only dump past_0
+      // {
+      //   dumper->Print("past_key of beam", static_cast<int>(j), true);
+      //   dumper->Print(nullptr, past_key.data(), 1, static_cast<int>(block_size_per_beam));
+      //   dumper->Print("past_value of beam", static_cast<int>(j), true);
+      //   dumper->Print(nullptr, past_value.data(), 1, static_cast<int>(block_size_per_beam));
+      // }
 #endif
     }
 

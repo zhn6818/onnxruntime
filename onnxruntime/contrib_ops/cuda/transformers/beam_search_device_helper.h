@@ -54,10 +54,10 @@ Status ProcessLogits(const OrtValue& logits,                                    
                      void* stream,                                                  // cuda stream (for CUDA only)
                      const transformers::IConsoleDumper* dumper);                         // tensor dumper
 
-void DeviceCopy(gsl::span<float> target,
-                gsl::span<const float> source,
-                void* stream,
-                int copyDirection);
+Status  DeviceCopy(gsl::span<float> target,
+                   gsl::span<const float> source,
+                   void* stream,
+                   int copyDirection);
 
 Status UpdateFeeds(
     AllocatorPtr allocator,

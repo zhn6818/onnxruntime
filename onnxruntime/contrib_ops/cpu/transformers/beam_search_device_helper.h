@@ -80,7 +80,7 @@ using ProcessLogitsFunc = std::function<Status(
     void* stream,
     const transformers::IConsoleDumper* dumper)>;
 
-using DeviceCopyFunc = std::function<void(
+using DeviceCopyFunc = std::function<Status(
     gsl::span<float> target,
     gsl::span<const float> source,
     void* stream,
@@ -150,10 +150,10 @@ Status ProcessLogits(const OrtValue& logits,                                    
                      void* stream,
                      const transformers::IConsoleDumper* dumper);
 
-void DeviceCopy(gsl::span<float> target,
-                gsl::span<const float> source,
-                void* stream,
-                int copyDirectionn);
+Status DeviceCopy(gsl::span<float> target,
+                  gsl::span<const float> source,
+                  void* stream,
+                  int copyDirectionn);
 
 Status UpdateFeeds(
     AllocatorPtr allocator,

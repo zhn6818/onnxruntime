@@ -399,13 +399,12 @@ Status BeamSearchImpl<T>::GenerateNextToken(
   // It is optional to clone beam_scores. Change it to use same buffer also works for CPU:
   //    beam_state.beam_scores = beam_scores
   // Here we make a copy to reduce the coupling with little cost (the buffer size is small).
-  device_copy_func_(beam_state.beam_scores, beam_scores, stream_, DeviceCopyDirection::hostToDevice);
+  ORT_RETURN_IF_ERROR(device_copy_func_(beam_state.beam_scores, beam_scores, stream_, DeviceCopyDirection::hostToDevice));
 
   beam_next_tokens = beam_scorer_->GetNextTokens();
   beam_indices = beam_scorer_->GetNextIndices();
 
 #ifdef DEBUG_BEAM_SEARCH
-  // const IConsoleDumper* dumper = GetConsoleDumper();
   cpu_dumper_.Print("beam_scores after scorer", beam_scores.data(), parameters_->batch_size, parameters_->num_beams);
   cpu_dumper_.Print("beam_next_tokens after scorer", beam_next_tokens.data(), parameters_->batch_size, parameters_->num_beams);
   cpu_dumper_.Print("beam_indices after scorer", beam_indices.data(), parameters_->batch_size, parameters_->num_beams);
@@ -552,16 +551,16 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
     }
     fetches.clear();
 
-#ifdef DEBUG_BEAM_SEARCH
-    if (current_length - parameters_->sequence_length == 3) {  // only dump a few steps.
-      const_cast<IConsoleDumper*>(dumper)->Disable();
-    }
-#endif
+// #ifdef DEBUG_BEAM_SEARCH
+//     if (current_length - parameters_->sequence_length == 3) {  // only dump a few steps.
+//       const_cast<IConsoleDumper*>(dumper)->Disable();
+//     }
+// #endif
   }
 
   gsl::span<const T> final_beam_scores(beam_state.beam_scores.data(), beam_state.beam_scores.size());
   if (IsCuda()) {
-    device_copy_func_(cpu_state.final_beam_scores, final_beam_scores, stream_, DeviceCopyDirection::deviceToHost);
+    ORT_RETURN_IF_ERROR(device_copy_func_(cpu_state.final_beam_scores, final_beam_scores, stream_, DeviceCopyDirection::deviceToHost));
     final_beam_scores = gsl::make_span<const T>(cpu_state.final_beam_scores.data(), cpu_state.final_beam_scores.size());
   }
 
@@ -575,7 +574,7 @@ Status BeamSearchImpl<T>::Execute(const FeedsFetchesManager& ffm) {
     gsl::span<T> target = output_scores->MutableDataAsSpan<T>();
     gsl::span<const T> source = gsl::span<const T>(beam_state.scores.data(), beam_state.scores.size());
     assert(target.length() == source.length());
-    device_copy_func_(target, source, stream_, DeviceCopyDirection::deviceToDevice);
+    ORT_RETURN_IF_ERROR(device_copy_func_(target, source, stream_, DeviceCopyDirection::deviceToDevice));
   }
 
   return status;
