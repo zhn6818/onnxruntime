@@ -49,7 +49,7 @@ template <typename T>
 class ILogitsProcessorList {
  public:
   virtual ~ILogitsProcessorList() {}
-  virtual void Process(const ISequences* sequences, gsl::span<T>& next_token_scores) = 0;
+  virtual void Process(const ISequences* sequences, gsl::span<T>& next_token_scores, int step) = 0;
 };
 
 // Interface for all scorers for beam search or beam sample.
@@ -90,6 +90,7 @@ struct IBeamSearchParameters {
   int sequence_length;  // deduce from second dimension of input_ids
 
   gsl::span<const int32_t> vocab_mask;
+  gsl::span<const int32_t> prefix_vocab_mask;
 
   // Parameters from outputs.
   bool output_scores;  // whether scores existed in output

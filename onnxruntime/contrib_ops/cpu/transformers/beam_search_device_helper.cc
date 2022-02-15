@@ -198,8 +198,9 @@ Status ProcessLogits(const OrtValue& logits,                                    
                      transformers::ILogitsProcessorList<float>* logits_processors,  // logits processors
                      transformers::IBeamScorer<float>* beam_scorer,                 // beam scorer
                      const transformers::IBeamSearchParameters* parameters,         // parameters
+                     int step,                                                      // iteration counter
                      void* stream,                                                  // cuda stream (for CUDA only)
-                     const transformers::IConsoleDumper* dumper) {
+                     const transformers::IConsoleDumper* dumper){                   // tensor dumper
   int batch_size = parameters->batch_size;
   int num_beams = parameters->num_beams;
   int vocab_size = parameters->vocab_size;
@@ -247,7 +248,7 @@ Status ProcessLogits(const OrtValue& logits,                                    
 #endif
 
   // Apply all score processors that updates scores
-  logits_processors->Process(sequences, next_token_scores);
+  logits_processors->Process(sequences, next_token_scores, step);
 
 #ifdef DEBUG_BEAM_SEARCH
   dumper->Print("next_token_scores after logits processor", next_token_scores.data(), batch_size, num_beams, vocab_size);

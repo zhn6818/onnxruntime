@@ -51,8 +51,9 @@ Status ProcessLogits(const OrtValue& logits,                                    
                      transformers::ILogitsProcessorList<float>* logits_processors,  // logits processors
                      transformers::IBeamScorer<float>* beam_scorer,                 // beam scorer
                      const transformers::IBeamSearchParameters* parameters,         // parameters
+                     int step,                                                      // iteration counter
                      void* stream,                                                  // cuda stream (for CUDA only)
-                     const transformers::IConsoleDumper* dumper);                         // tensor dumper
+                     const transformers::IConsoleDumper* dumper);                   // tensor dumper
 
 Status  DeviceCopy(gsl::span<float> target,
                    gsl::span<const float> source,

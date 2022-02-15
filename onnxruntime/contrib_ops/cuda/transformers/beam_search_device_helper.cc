@@ -36,17 +36,17 @@ Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest,
   ORT_ENFORCE(axis >= 0 && axis < rank);
   ORT_ENFORCE(k > 0 && k <= input->Shape().GetDims()[axis]);
 
-  auto output_shape = input->Shape();
+  auto input_shape = input->Shape();
+  auto output_shape = input_shape;
   output_shape[axis] = k;
 
-  auto elem_nums = input->Shape().GetDimsAsVector();
-  int64_t dimension = elem_nums[axis];
-  for (auto i = static_cast<int32_t>(elem_nums.size()) - 2; i >= 0; --i) {
-    elem_nums[i] *= elem_nums[i + 1];
+  TArray<int64_t> elem_nums_cuda(input->Shape().GetDims());
+  for (int32_t i = elem_nums_cuda.Size() - 2; i >= 0; --i) {
+    elem_nums_cuda[i] *= elem_nums_cuda[i + 1];
   }
 
-  int64_t N = elem_nums[0] / dimension;
-  TArray<int64_t> elem_nums_cuda(elem_nums);
+  int64_t dimension = input_shape[axis];
+  int64_t N = elem_nums_cuda[0] / dimension;
 
   output_values = Tensor::Create(input->DataType(), output_shape, allocator);
   output_indices = Tensor::Create(DataTypeImpl::GetType<int64_t>(), output_shape, allocator);
@@ -58,7 +58,7 @@ Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest,
                            static_cast<float*>(output_values->MutableDataRaw()),
                            static_cast<int64_t*>(output_indices->MutableDataRaw()),
                            elem_nums_cuda,
-                           elem_nums.size(),
+                           static_cast<size_t>(elem_nums_cuda.Size()),
                            static_cast<int32_t>(axis),
                            static_cast<int64_t>(k),
                            static_cast<int64_t>(largest),
@@ -72,7 +72,7 @@ Status TopK(const Tensor* input, const int axis, const unsigned k, bool largest,
                                static_cast<MLFloat16*>(output_values->MutableDataRaw()),
                                static_cast<int64_t*>(output_indices->MutableDataRaw()),
                                elem_nums_cuda,
-                               elem_nums.size(),
+                               static_cast<size_t>(elem_nums_cuda.Size()),
                                static_cast<int32_t>(axis),
                                static_cast<int64_t>(k),
                                static_cast<int64_t>(largest),
@@ -177,17 +177,18 @@ void InitBeamState(transformers::IBeamSearchState<float>* beam_state,
   }
 }
 
-Status ProcessLogits(const OrtValue& logits,                                        // logits output of subgraph
-                     transformers::IBeamSearchState<float>* beam_state,             // state
-                     transformers::IBeamSearchCpuState<float>* cpu_state,           // state in CPU
-                     transformers::ISequences* sequences,                           // sequences
-                     AllocatorPtr& allocator,                                       // default allocator
-                     onnxruntime::concurrency::ThreadPool* thread_pool,             // thread pool (for CPU only)
-                     transformers::ILogitsProcessorList<float>* logits_processors,  // logits processors
-                     transformers::IBeamScorer<float>* beam_scorer,                 // beam scorer
-                     const transformers::IBeamSearchParameters* parameters,         // parameters
-                     void* stream,                                                  // cuda stream (for CUDA only)
-                     const transformers::IConsoleDumper* dumper) {
+Status ProcessLogits(const OrtValue& logits,                                            // logits output of subgraph
+                     transformers::IBeamSearchState<float>* beam_state,                 // state
+                     transformers::IBeamSearchCpuState<float>* cpu_state,               // state in CPU
+                     transformers::ISequences* sequences,                               // sequences
+                     AllocatorPtr& allocator,                                           // default allocator
+                     onnxruntime::concurrency::ThreadPool* thread_pool,                 // thread pool (for CPU only)
+                     transformers::ILogitsProcessorList<float>* /*logits_processors*/,  // logits processors
+                     transformers::IBeamScorer<float>* beam_scorer,                     // beam scorer
+                     const transformers::IBeamSearchParameters* parameters,             // parameters
+                     int /*step*/,                                                      // iteration counter
+                     void* stream,                                                      // cuda stream (for CUDA only)
+                     const transformers::IConsoleDumper* dumper) {                      // tensor dumper
   int batch_size = parameters->batch_size;
   int num_beams = parameters->num_beams;
   int vocab_size = parameters->vocab_size;
@@ -315,7 +316,6 @@ Status ProcessLogits(const OrtValue& logits,                                    
       next_scores,
       next_tokens,
       next_indices);
-
   return Status::OK();
 }
 
@@ -433,11 +433,11 @@ Status UpdateFeeds(
   // Make sure data is ready before next subgraph execution.
   CUDA_RETURN_IF_ERROR(cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(stream)));
 
-  #ifdef DEBUG_BEAM_SEARCH
-    dumper->Print("input_ids", input_ids);
-    dumper->Print("position_ids", position_ids);
-    dumper->Print("attention_mask", attention_mask);
-  #endif
+#ifdef DEBUG_BEAM_SEARCH
+  dumper->Print("input_ids", input_ids);
+  dumper->Print("position_ids", position_ids);
+  dumper->Print("attention_mask", attention_mask);
+#endif
 
   // Update past state
   if (num_beams == 1) {
