@@ -405,6 +405,7 @@ class GraphExecutionManager(GraphExecutionInterface):
         assert self._export_mode is not None, "Please use a concrete instance of ExecutionManager"
 
         try:
+<<<<<<< HEAD
             with torch.set_grad_enabled(self._enable_custom_autograd_function), _logger.suppress_os_stream_output(
                 log_level=self._debug_options.logging.log_level
             ):
@@ -419,6 +420,20 @@ class GraphExecutionManager(GraphExecutionInterface):
                     "export_params": False,
                     "keep_initializers_as_inputs": True,
                 }
+=======
+            with torch.set_grad_enabled(self._enable_custom_autograd_function), \
+                    _logger.suppress_os_stream_output(log_level=self._debug_options.logging.log_level):
+                required_export_kwargs = {'input_names': self._input_info.names,
+                                          'output_names': output_names,
+                                          'opset_version': ortmodule.ONNX_OPSET_VERSION,
+                                          'do_constant_folding': False,
+                                          'training': self._export_mode,
+                                          'dynamic_axes': self._input_info.dynamic_axes,
+                                          'verbose': self._debug_options.logging.log_level < LogLevel.WARNING,
+                                          'export_params': False,
+                                          'keep_initializers_as_inputs': True,
+                                          'operator_export_type': torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK}
+>>>>>>> Enable Pytorch exporter 's Aten fallback by default
                 invalid_args = self._export_extra_kwargs.keys() & required_export_kwargs.keys()
                 assert (
                     len(invalid_args) == 0
