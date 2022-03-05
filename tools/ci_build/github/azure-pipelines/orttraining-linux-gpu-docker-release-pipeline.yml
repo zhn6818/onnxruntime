@@ -16,7 +16,7 @@ jobs:
   timeoutInMinutes: 110
   workspace:
     clean: all
-  pool: Onnxruntime-Linux-GPU
+  pool: Onnxruntime-Linux-GPU-NV6
   steps:
   - task: CmdLine@2
     displayName: Build builder stage of docker file

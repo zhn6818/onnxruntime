@@ -21,7 +21,7 @@ jobs:
   workspace:
     clean: all
   timeoutInMinutes:  180
-  pool: 'Onnxruntime-Linux-GPU'
+  pool: 'Onnxruntime-Linux-GPU-NV6'
   variables:
     CUDA_VERSION: '11.4'
   steps:

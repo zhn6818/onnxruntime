@@ -288,7 +288,7 @@ stages:
       timeoutInMinutes: 180
       workspace:
         clean: all
-      pool: Onnxruntime-Linux-GPU
+      pool: Onnxruntime-Linux-GPU-NV6
       strategy:
         matrix:
           ${{ each PythonVersion in parameters.python_version }}:
