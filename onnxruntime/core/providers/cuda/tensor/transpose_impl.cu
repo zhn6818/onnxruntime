@@ -10,25 +10,26 @@ namespace cuda {
 constexpr unsigned int TILE_DIM = 16;
 
 template <typename T>
-__global__ void Transpose3DKernel(const TArray<int64_t> input_shape,
-                                  const TArray<int64_t> input_strides,
+__global__ void Transpose3DKernel(const TArray<int64_t> input_strides,
+                                  const TArray<int64_t> output_strides,
                                   const T* input_data, T* output_data) {
   __shared__ T tile[TILE_DIM * (TILE_DIM + 1)];
 
   int x = blockIdx.x * TILE_DIM + threadIdx.x;
   int y = blockIdx.y * TILE_DIM + threadIdx.y;
 
-  tile[threadIdx.y * TILE_DIM + threadIdx.x] = input_data[blockIdx.z * input_strides[0] + y * input_shape[2] + x];
+  tile[threadIdx.y * TILE_DIM + threadIdx.x] = input_data[blockIdx.z * input_strides[0] + y * input_strides[1] + x * input_strides[2]];
   __syncthreads();
 
   x = blockIdx.y * TILE_DIM + threadIdx.x;
   y = blockIdx.x * TILE_DIM + threadIdx.y;
 
-  output_data[blockIdx.z * input_strides[0] + y * input_shape[1] + x] = tile[threadIdx.x * TILE_DIM + threadIdx.y];
+  // Output is contiguous.
+  output_data[blockIdx.z * output_strides[0] + y * output_strides[1] + x] = tile[threadIdx.x * TILE_DIM + threadIdx.y];
 }
 
 bool CanDoTranspose3D(const cudaDeviceProp& prop,
-                      int32_t rank,
+                      size_t rank,
                       const gsl::span<const int64_t>& input_dims,
                       const gsl::span<const size_t>& permutations,
                       dim3& grid_size, dim3& block_size) {
@@ -55,30 +56,30 @@ bool CanDoTranspose3D(const cudaDeviceProp& prop,
 }
 
 Status Transpose3DImpl(cudaStream_t stream, size_t element_size,
-                       const TArray<int64_t>& input_shape, const TArray<int64_t>& input_strides,
+                       const TArray<int64_t>& input_strides, const TArray<int64_t>& output_strides,
                        const void* input_data, void* output_data, int64_t N, const dim3& grid_size, const dim3& block_size) {
   switch (element_size) {
     case sizeof(int8_t):
       Transpose3DKernel<int8_t><<<grid_size, block_size, 0, stream>>>(
-          input_shape, input_strides,
+          input_strides, output_strides,
           reinterpret_cast<const ToCudaType<int8_t>::MappedType*>(input_data),
           reinterpret_cast<ToCudaType<int8_t>::MappedType*>(output_data));
       break;
     case sizeof(int16_t):
       Transpose3DKernel<int16_t><<<grid_size, block_size, 0, stream>>>(
-          input_shape, input_strides,
+          input_strides, output_strides,
           reinterpret_cast<const ToCudaType<int16_t>::MappedType*>(input_data),
           reinterpret_cast<ToCudaType<int16_t>::MappedType*>(output_data));
       break;
     case sizeof(int32_t):
       Transpose3DKernel<int32_t><<<grid_size, block_size, 0, stream>>>(
-          input_shape, input_strides,
+          input_strides, output_strides,
           reinterpret_cast<const ToCudaType<int32_t>::MappedType*>(input_data),
           reinterpret_cast<ToCudaType<int32_t>::MappedType*>(output_data));
       break;
     case sizeof(int64_t):
       Transpose3DKernel<int64_t><<<grid_size, block_size, 0, stream>>>(
-          input_shape, input_strides,
+          input_strides, output_strides,
           reinterpret_cast<const ToCudaType<int64_t>::MappedType*>(input_data),
           reinterpret_cast<ToCudaType<int64_t>::MappedType*>(output_data));
       break;

@@ -11,18 +11,11 @@ namespace onnxruntime {
 namespace cuda {
 
 template <typename T, typename VariadicElementwiseOpTag>
-void Impl_General(
-    cudaStream_t stream,
-    int32_t output_rank_or_simple_broadcast,
-    const TArray<int64_t>* lhs_padded_strides,
-    const T* lhs_data,
-    const TArray<int64_t>* rhs_padded_strides,
-    const T* rhs_data,
-    const TArray<fast_divmod>* fdm_output_strides,
-    const fast_divmod& fdm_H,
-    const fast_divmod& fdm_C,
-    T* output_data,
-    size_t count);
+void Impl_General(cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type,
+                  BroadcastIndexType rhs_index_type, gsl::span<const int64_t> lhs_strides,
+                  gsl::span<const int64_t> rhs_strides, gsl::span<const int64_t> output_shapes,
+                  gsl::span<const int64_t> output_strides, const T* lhs_data, const T* rhs_data, T* output_data,
+                  size_t count);
 
 constexpr int32_t k_max_input_batch_size = 8;
 
