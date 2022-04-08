@@ -3953,7 +3953,7 @@ def test_stateless_model_unspecified_device():
 def test_unused_parameters_does_not_unnecessarily_reinitialize(model):
     device = "cuda"
 
-    N, D_in, H1, H2, D_out = 64, 784, 500, 400, 10
+    N, D_in, _, _, _ = 64, 784, 500, 400, 10
     model = model.to(device)
     ort_model = ORTModule(copy.deepcopy(model))
     training_manager = ort_model._torch_module._execution_manager(ort_model._is_training())
@@ -4040,8 +4040,8 @@ def test_ortmodule_string_inputs_are_ignored():
     x = torch.randn(1, 2)
 
     with pytest.warns(UserWarning) as warning_record:
-        out = ort_model(x, 'hello')
-    if LooseVersion(torch.__version__) >= LooseVersion('1.10.0'):
+        out = ort_model(x, "hello")
+    if LooseVersion(torch.__version__) >= LooseVersion("1.10.0"):
         assert len(warning_record) == 7
     else:
         assert len(warning_record) == 2
@@ -4049,7 +4049,8 @@ def test_ortmodule_string_inputs_are_ignored():
         "Received input of type <class 'str'> which may be treated as a constant by ORT by default."
         in warning_record[1].message.args[0]
     )
-    _test_helpers.assert_values_are_close(out, x+1)
+    _test_helpers.assert_values_are_close(out, x + 1)
+
 
 def test_ortmodule_list_input():
     class ListNet(torch.nn.Module):
