@@ -827,6 +827,16 @@ class TestInferenceSession(unittest.TestCase):
         res = sess.run(["Y"], {"X": np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float32)})
         self.assertTrue(np.array_equal(res[0], np.array([[2.0, 2.0], [12.0, 12.0], [30.0, 30.0]], dtype=np.float32)))
 
+    def testSessionOptionsAddExternalInitializers(self):
+        # Create an external initializer data in OrtValue
+        # This initializer will replace the initializer with external data reference in the graph
+        ortvalue_initializer = onnxrt.OrtValue.ortvalue_from_numpy(np.array([0, 0, 1, 1]).astype(np.int64))
+        so = onnxrt.SessionOptions()
+        so.add_external_initializers(["Pads_not_on_disk"], [ortvalue_initializer])
+        # This should not throw
+        onnxrt.InferenceSession(get_name("model_with_external_initializer_come_from_user.onnx"), sess_options=so, providers=['CPUExecutionProvider'])
+
+
     def testRegisterCustomOpsLibrary(self):
         if sys.platform.startswith("win"):
             shared_library = 'custom_op_library.dll'
@@ -1067,6 +1077,33 @@ class TestInferenceSession(unittest.TestCase):
         so2 = onnxrt.SessionOptions()
         so2.log_severity_level = 1
         onnxrt.InferenceSession(get_name("mul_1.onnx"), sess_options=so2, providers=onnxrt.get_available_providers())
+
+    def testMemoryArenaShrinkage(self):
+        if platform.architecture()[0] == '32bit' or 'ppc' in platform.machine() or 'powerpc' in platform.machine():
+            # on x86 or ppc builds, the CPU allocator does not use an arena
+            print("Skipping testMemoryArenaShrinkage in 32bit or powerpc platform.")
+        else:
+            x = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float32)
+
+            sess1 = onnxrt.InferenceSession(get_name("mul_1.onnx"), providers=['CPUExecutionProvider'])
+            input_name = sess1.get_inputs()[0].name
+
+            # Shrink CPU memory after execution
+            ro1 = onnxrt.RunOptions()
+            ro1.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu:0")
+            self.assertEqual(ro1.get_run_config_entry("memory.enable_memory_arena_shrinkage"), "cpu:0")
+            sess1.run([], {input_name: x}, ro1)
+
+            available_providers = onnxrt.get_available_providers()
+            if 'CUDAExecutionProvider' in available_providers:
+                sess2 = onnxrt.InferenceSession(get_name("mul_1.onnx"), providers=available_providers)
+                input_name = sess2.get_inputs()[0].name
+
+                # Shrink CPU and GPU memory after execution
+                ro2 = onnxrt.RunOptions()
+                ro2.add_run_config_entry("memory.enable_memory_arena_shrinkage", "cpu:0;gpu:0")
+                self.assertEqual(ro2.get_run_config_entry("memory.enable_memory_arena_shrinkage"), "cpu:0;gpu:0")
+                sess2.run([], {input_name: x}, ro2)
 
     def testCheckAndNormalizeProviderArgs(self):
         from onnxruntime.capi.onnxruntime_inference_collection import check_and_normalize_provider_args
