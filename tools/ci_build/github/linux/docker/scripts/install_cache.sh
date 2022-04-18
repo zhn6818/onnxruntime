@@ -3,7 +3,7 @@ set -ex
 
 mkdir -p /opt/cache/bin
 mkdir -p /opt/cache/lib
-export PATH="/opt/cache/bin:$PATH"
+
 echo "Downloading sccache binary from S3 repo"
 curl --retry 3 https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache -o /opt/cache/bin/sccache
 chmod a+x /opt/cache/bin/sccache
