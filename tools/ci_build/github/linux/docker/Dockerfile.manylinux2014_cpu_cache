@@ -1,0 +1,33 @@
+FROM quay.io/pypa/manylinux2014_x86_64:latest
+
+ENV PATH /usr/local/gradle/bin:/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+ADD scripts /tmp/scripts
+RUN cd /tmp/scripts && /tmp/scripts/manylinux/install_centos.sh && /tmp/scripts/manylinux/install_deps.sh && rm -rf /tmp/scripts
+
+mkdir -p /opt/cache/bin
+mkdir -p /opt/cache/lib
+export PATH="/opt/cache/bin:$PATH"
+echo "Downloading sccache binary from S3 repo"
+curl --retry 3 https://s3.amazonaws.com/ossci-linux/sccache -o /opt/cache/bin/sccache
+https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache
+chmod a+x /opt/cache/bin/sccache
+
+function write_sccache_stub() {
+  printf "#!/bin/sh\nif [ \$(ps -p \$PPID -o comm=) != sccache ]; then\n  exec sccache $(which $1) \"\$@\"\nelse\n  exec $(which $1) \"\$@\"\nfi" > "/opt/cache/bin/$1"
+  chmod a+x "/opt/cache/bin/$1"
+}
+
+write_sccache_stub cc
+write_sccache_stub c++
+write_sccache_stub gcc
+write_sccache_stub g++
+
+ARG BUILD_UID=1001
+ARG BUILD_USER=onnxruntimedev
+RUN adduser --uid $BUILD_UID $BUILD_USER
+WORKDIR /home/$BUILD_USER
+USER $BUILD_USER
+
+
+

@@ -20,7 +20,7 @@ stages:
       pool: Linux-CPU
 
       variables:
-        DockerFile: 'Dockerfile.manylinux2014_cpu'
+        DockerFile: 'Dockerfile.manylinux2014_cpu_cache'
 
       strategy:
         matrix:
@@ -70,7 +70,7 @@ stages:
               -e NIGHTLY_BUILD \
               -e BUILD_BUILDNUMBER \
               onnxruntimetrainingcpubuild \
-                $(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
+                "$(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                   --build_dir /build --cmake_generator Ninja \
                   --config Debug Release \
                   --skip_submodule_sync \
@@ -79,7 +79,8 @@ stages:
                   --build_wheel \
                   --use_openmp \
                   --enable_onnx_tests \
-                  --enable_pybind --build_java --build_nodejs --enable_training
+                  --enable_pybind --build_java --build_nodejs --enable_training; \
+                which sccache && sccache -s"
           workingDirectory: $(Build.SourcesDirectory)
 
       - task: CopyFiles@2
