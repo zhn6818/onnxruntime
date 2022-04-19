@@ -11,12 +11,12 @@ mkdir -p /opt/cache/lib
 #chmod a+x /opt/cache/bin/sccache
 #/opt/cache/bin/sccache --version
 
-# https://snapcraft.io/install/sccache/centos
-yum install -y epel-release
-yum install -y snapd
-systemctl enable --now snapd.socket
-ln -s /var/lib/snapd/snap /snap
-snap install -y sccache --candidate --classic
+# https://github.com/MaterializeInc/docker-sccache/blob/master/Dockerfile
+VERSION=v0.2.15
+curl -L https://github.com/mozilla/sccache/releases/download/$VERSION/sccache-$VERSION-x86_64-unknown-linux-musl.tar.gz > sccache.tar.gz \
+    && tar xf sccache.tar.gz \
+    && mv sccache-$VERSION-x86_64-unknown-linux-musl/sccache /usr/local/bin/sccache \
+    && rm -r sccache.tar.gz sccache-$VERSION-x86_64-unknown-linux-musl
 sccache --version
 
 function write_sccache_stub() {
