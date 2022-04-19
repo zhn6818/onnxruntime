@@ -358,7 +358,7 @@ class PlannerImpl {
       }
     }
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
     // If any output of the kernel can support strided tensor, and all its consumers' inputs also support
     // strided tensors at the corresponding position, this output will generate a strided tensor
     // and share the data from the corresponding input specified in MayStridedOutputsMap.

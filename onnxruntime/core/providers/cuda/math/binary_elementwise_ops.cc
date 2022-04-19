@@ -81,7 +81,7 @@ Status BinaryElementwise<ShouldBroadcast>::Prepare(OpKernelContext* context, Bin
   return Status::OK();
 }
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
 #define CREATE_BEW_KERNEL_DEF (*KernelDefBuilder::Create()).MayStridedInput(0).MayStridedInput(1)
 #else
 #define CREATE_BEW_KERNEL_DEF (*KernelDefBuilder::Create())

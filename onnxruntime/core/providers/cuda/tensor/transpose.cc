@@ -10,7 +10,7 @@
 namespace onnxruntime {
 namespace cuda {
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
 #define CREATE_TRANS_KERNEL_DEF (*KernelDefBuilder::Create()).MayStridedInput(0).MayStridedOutput(0, 0)
 #else
 #define CREATE_TRANS_KERNEL_DEF (*KernelDefBuilder::Create())
@@ -108,7 +108,7 @@ Status Transpose::DoTranspose(const cudaDeviceProp& prop,
   TensorShapeVector new_output_dims = ToShapeVector(output_dims);
 
   bool is_contiguous = true;
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   is_contiguous = input.IsContiguous();
 #endif
 
@@ -214,7 +214,7 @@ Status Transpose::DoTranspose(const cudaDeviceProp& prop,
 
   TensorShapeVector new_input_strides = TensorPitches(new_input_dims);
   TensorShapeVector new_output_strides = TensorPitches(new_output_dims);
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   if (!is_contiguous) new_input_strides = ToShapeVector(input.Strides());
 #endif
 
@@ -290,7 +290,7 @@ Status Transpose::ComputeInternal(OpKernelContext* ctx) const {
   TensorShape output_shape{output_dims};
   Tensor* p_Y = ctx->Output(0, output_shape);
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   if (X.DataRaw() == p_Y->DataRaw()) {
     // Calculate and set new strides.
     auto old_strides = X.Strides();

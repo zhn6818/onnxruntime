@@ -250,7 +250,7 @@ class Tensor final {
   */
   size_t SizeInBytes() const;
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   /**
    * Get the strides of the tensor.
    */
@@ -278,7 +278,7 @@ class Tensor final {
 
   void ReleaseBuffer();
 
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   bool CheckIsContiguous() const;
 #endif
 
@@ -291,7 +291,7 @@ class Tensor final {
   AllocatorPtr buffer_deleter_;
 
   TensorShape shape_;
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
   mutable TensorShapeVector strides_;
   bool is_contiguous_ = true;
 #endif

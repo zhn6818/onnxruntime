@@ -30,7 +30,7 @@ struct BinaryElementwisePreparation {
     bool rhs_is_contiguous = true;
     TensorShapeVector lhs_original_strides = TensorPitches(lhs_shape);
     TensorShapeVector rhs_original_strides = TensorPitches(rhs_shape);
-#ifdef ENABLE_TRAINING
+#ifndef ORT_MINIMAL_BUILD
     if (lhs_tensor) {
       lhs_is_contiguous = lhs_tensor->IsContiguous();
       if (!lhs_is_contiguous) {
