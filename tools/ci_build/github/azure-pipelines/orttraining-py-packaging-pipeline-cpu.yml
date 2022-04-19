@@ -72,11 +72,9 @@ stages:
               onnxruntimetrainingcpubuild \
                 /bin/bash -c \
                 " which cc; \
-                export PATH='/opt/cache/bin:$PATH'; \
-                which cc; \
-                cat /opt/cache/bin/cc; \
-                /opt/rh/devtoolset-10/root/usr/bin/cc --version; \
-                sccache /opt/rh/devtoolset-10/root/usr/bin/cc --version ; \
+                export PATH=/opt/cache/bin:$PATH; \
+                echo $PATH; \
+                gradle --version; \
                 $(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                   --build_dir /build --cmake_generator Ninja \
                   --config Debug Release \
