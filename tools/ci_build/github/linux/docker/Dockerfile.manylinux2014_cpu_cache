@@ -3,18 +3,13 @@ FROM quay.io/pypa/manylinux2014_x86_64:latest
 ENV PATH /usr/local/gradle/bin:/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 ADD scripts /tmp/scripts
-RUN ls /tmp/scripts
 RUN chmod a+x /tmp/scripts/install_cache.sh
 RUN cd /tmp/scripts && /tmp/scripts/manylinux/install_centos.sh && /tmp/scripts/manylinux/install_deps.sh && /tmp/scripts/install_cache.sh && rm -rf /tmp/scripts
 
 RUN ls /opt/cache/bin
-RUN export PATH="/opt/cache/bin:$PATH"
 
 ARG BUILD_UID=1001
 ARG BUILD_USER=onnxruntimedev
 RUN adduser --uid $BUILD_UID $BUILD_USER
 WORKDIR /home/$BUILD_USER
 USER $BUILD_USER
-
-
-

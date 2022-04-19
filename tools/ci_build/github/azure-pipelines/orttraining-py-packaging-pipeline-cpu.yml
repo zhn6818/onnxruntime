@@ -71,7 +71,8 @@ stages:
               -e BUILD_BUILDNUMBER \
               onnxruntimetrainingcpubuild \
                 /bin/bash -c \
-                "$(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
+                "export PATH="/opt/cache/bin:$PATH; \
+                $(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                   --build_dir /build --cmake_generator Ninja \
                   --config Debug Release \
                   --skip_submodule_sync \
