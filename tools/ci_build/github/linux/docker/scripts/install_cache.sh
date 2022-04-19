@@ -9,6 +9,7 @@ mkdir -p /opt/cache/lib
 echo "Downloading sccache binary from S3 repo"
 curl --retry 3 https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache -o /opt/cache/bin/sccache
 chmod a+x /opt/cache/bin/sccache
+/opt/cache/bin/sccache --version
 
 function write_sccache_stub() {
   printf "#!/bin/sh\nif [ \$(ps -p \$PPID -o comm=) != sccache ]; then\n  exec sccache $(which $1) \"\$@\"\nelse\n  exec $(which $1) \"\$@\"\nfi" > "/opt/cache/bin/$1"

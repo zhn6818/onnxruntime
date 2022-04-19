@@ -4,7 +4,7 @@ ENV PATH /usr/local/gradle/bin:/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbi
 
 ADD scripts /tmp/scripts
 
-RUN yum install -y libssl1.0.0 libssl-dev
+RUN yum install -y openssl-devel
 RUN chmod a+x /tmp/scripts/install_cache.sh
 RUN cd /tmp/scripts && /tmp/scripts/manylinux/install_centos.sh && /tmp/scripts/manylinux/install_deps.sh && /tmp/scripts/install_cache.sh && rm -rf /tmp/scripts
 
