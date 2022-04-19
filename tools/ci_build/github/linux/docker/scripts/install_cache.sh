@@ -1,11 +1,10 @@
 #!/bin/bash
+
+#Please make sure libssl-dev is installed.
 set -ex
 
 mkdir -p /opt/cache/bin
 mkdir -p /opt/cache/lib
-
-apt-get -y update
-apt-get install -y libssl1.0.0 libssl-dev
 
 echo "Downloading sccache binary from S3 repo"
 curl --retry 3 https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache -o /opt/cache/bin/sccache
