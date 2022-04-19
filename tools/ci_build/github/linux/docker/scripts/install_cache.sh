@@ -14,9 +14,11 @@ mkdir -p /opt/cache/lib
 # https://github.com/MaterializeInc/docker-sccache/blob/master/Dockerfile
 VERSION=v0.2.15
 curl -L https://github.com/mozilla/sccache/releases/download/$VERSION/sccache-$VERSION-x86_64-unknown-linux-musl.tar.gz > sccache.tar.gz \
+    && echo 'e5d03a9aa3b9fac7e490391bbe22d4f42c840d31ef9eaf127a03101930cbb7ca  sccache.tar.gz' | sha256sum -c - \
     && tar xf sccache.tar.gz \
     && mv sccache-$VERSION-x86_64-unknown-linux-musl/sccache /usr/local/bin/sccache \
     && rm -r sccache.tar.gz sccache-$VERSION-x86_64-unknown-linux-musl
+chmod a+x /usr/local/bin/sccache
 sccache --version
 
 function write_sccache_stub() {
