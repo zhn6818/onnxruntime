@@ -44,6 +44,16 @@ stages:
         clean: true
         submodules: recursive
 
+      - task: CmdLine@2
+        displayName: 'Test AzCopy'
+        inputs:
+          script: |
+            files=("tools/ci_build/github/apple/ios_packaging.requirements.txt") && \
+            echo ${files[0]} && \
+            echo ${{ variables['finalStorage'] }} && \
+            tools/ci_build/upload_python_package_to_azure_storage.py \
+                --python_wheel_path ${files[0]} ${{ variables['finalStorage'] }}
+
       - template: templates/set-python-manylinux-variables-step.yml
 
       - template: templates/get-docker-image-steps.yml
