@@ -53,6 +53,16 @@ jobs:
       addToPath: true
       architecture: "x64"
 
+  - task: CmdLine@2
+    displayName: 'Test AzCopy'
+    inputs:
+      script: |
+        files=("tools/ci_build/github/apple/ios_packaging.requirements.txt") && \
+        echo ${files[0]} && \
+        echo ${{ variables['finalStorage'] }} && \
+        tools/ci_build/upload_python_package_to_azure_storage.py \
+            --python_wheel_path ${files[0]} ${{ variables['finalStorage'] }}
+
   - script: |
       pip install -r tools/ci_build/github/apple/ios_packaging.requirements.txt
     displayName: "Install Python requirements"
