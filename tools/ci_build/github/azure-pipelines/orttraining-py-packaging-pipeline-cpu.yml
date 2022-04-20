@@ -71,7 +71,7 @@ stages:
               -e BUILD_BUILDNUMBER \
               onnxruntimetrainingcpubuild \
                 /bin/bash -c \
-                " which cc; \
+                "which cc; \
                 export PATH=/opt/cache/bin:$PATH; \
                 echo $PATH; \
                 gradle --version; \

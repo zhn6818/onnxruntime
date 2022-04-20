@@ -74,7 +74,7 @@ stages:
 
       - template: get-docker-image-steps.yml
         parameters:
-          Dockerfile: tools/ci_build/github/linux/docker/Dockerfile.manylinux2014_cpu
+          Dockerfile: tools/ci_build/github/linux/docker/Dockerfile.manylinux2014_cpu_cache
           Context: tools/ci_build/github/linux/docker
           DockerBuildArgs: "--build-arg BUILD_UID=$( id -u )"
           Repository: onnxruntimecpubuild
@@ -93,6 +93,9 @@ stages:
               -e NIGHTLY_BUILD \
               -e BUILD_BUILDNUMBER \
               onnxruntimecpubuild \
+                /bin/bash -c \
+                "which cc; \
+                export PATH=/opt/cache/bin:$PATH; \
                 $(PythonManylinuxDir)/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                   --build_dir /build --cmake_generator Ninja \
                   --config Release --update --build \
@@ -101,7 +104,8 @@ stages:
                   --enable_lto \
                   --build_wheel \
                   --enable_onnx_tests \
-                  ${{ parameters.build_py_parameters }}
+                  ${{ parameters.build_py_parameters }} ;\
+                which sccache && sccache -s"
           workingDirectory: $(Build.SourcesDirectory)
 
       - task: CmdLine@2
