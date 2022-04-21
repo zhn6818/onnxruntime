@@ -6,20 +6,10 @@ set -ex
 mkdir -p /opt/cache/bin
 mkdir -p /opt/cache/lib
 
-#echo "Downloading sccache binary from S3 repo"
-#curl --retry 3 https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache -o /opt/cache/bin/sccache
-#chmod a+x /opt/cache/bin/sccache
-#/opt/cache/bin/sccache --version
-
-# https://github.com/MaterializeInc/docker-sccache/blob/master/Dockerfile
-VERSION=v0.2.15
-curl -L https://github.com/mozilla/sccache/releases/download/$VERSION/sccache-$VERSION-x86_64-unknown-linux-musl.tar.gz > sccache.tar.gz \
-    && echo 'e5d03a9aa3b9fac7e490391bbe22d4f42c840d31ef9eaf127a03101930cbb7ca  sccache.tar.gz' | sha256sum -c - \
-    && tar xf sccache.tar.gz \
-    && mv sccache-$VERSION-x86_64-unknown-linux-musl/sccache /usr/local/bin/sccache \
-    && rm -r sccache.tar.gz sccache-$VERSION-x86_64-unknown-linux-musl
-chmod a+x /usr/local/bin/sccache
-sccache --version
+echo "Downloading sccache binary from Azure blob"
+curl --retry 3 https://onnxruntimepackagesint.blob.core.windows.net/bin/sccache -o /opt/cache/bin/sccache
+chmod a+x /opt/cache/bin/sccache
+/opt/cache/bin/sccache --version
 
 function write_sccache_stub() {
   printf "#!/bin/sh\nif [ \$(ps -p \$PPID -o comm=) != sccache ]; then\n  exec sccache $(which $1) \"\$@\"\nelse\n  exec $(which $1) \"\$@\"\nfi" > "/opt/cache/bin/$1"
