@@ -232,6 +232,7 @@ CUDAExecutionProvider::CUDAExecutionProvider(const CUDAExecutionProviderInfo& in
 }
 
 CUDAExecutionProvider::~CUDAExecutionProvider() {
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   auto cpu_alloc = GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
   {
     std::lock_guard<OrtMutex> lock(deferred_release_cpu_ptr_mutex_);
@@ -248,6 +249,7 @@ CUDAExecutionProvider::~CUDAExecutionProvider() {
       it = deferred_release_cpu_ptr_.erase(it);
     }
   }
+#endif
 
   // clean up thread local context caches
   {
@@ -339,6 +341,7 @@ Status CUDAExecutionProvider::Sync() const {
   return Status::OK();
 }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
 void CUDAExecutionProvider::AddDeferredReleaseCPUPtr(void* p) {
   // when not running in InferenceSession (e.g. Test)
   // it's OK to not remember the deferred release ptr
@@ -351,10 +354,13 @@ void CUDAExecutionProvider::AddDeferredReleaseCPUPtr(void* p) {
     iter->second.cpu_ptrs.push_back(p);
   }
 }
+#endif
 
 Status CUDAExecutionProvider::OnRunStart() {
   // always set CUDA device when session::Run() in case it runs in a worker thread
   CUDA_RETURN_IF_ERROR(cudaSetDevice(GetDeviceId()));
+
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   auto cpu_alloc = GetAllocator(0, OrtMemTypeCPU);
   // check if cudaEvents has passed for deferred release
   // note that we need to take a mutex in case of multi-threaded Run()
@@ -379,6 +385,7 @@ Status CUDAExecutionProvider::OnRunStart() {
   auto& current_deferred_release_event = GetPerThreadContext().GetCurrentDeferredReleaseEvent();
   CUDA_RETURN_IF_ERROR(cudaEventCreate(&current_deferred_release_event, cudaEventDisableTiming));
   deferred_release_cpu_ptr_.emplace(current_deferred_release_event, DeferredReleaseCPUPtrs());
+#endif
 
   if (IsGraphCaptureEnabled() && GetPerThreadContext().IsGraphCaptureAllowed() && !GetPerThreadContext().IsGraphCaptured()) {
     LOGS_DEFAULT(INFO) << "Capturing the cuda graph for this model";
@@ -398,9 +405,13 @@ Status CUDAExecutionProvider::OnRunEnd(bool sync_stream) {
       GetPerThreadContext().IncrementRegularRunCountBeforeGraphCapture();
     }
   }
+
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   // record deferred release event on default stream, and release per_thread_context
   auto current_deferred_release_event = GetPerThreadContext().GetCurrentDeferredReleaseEvent();
   CUDA_RETURN_IF_ERROR(cudaEventRecord(current_deferred_release_event, static_cast<cudaStream_t>(GetComputeStream())));
+#endif
+
   if (sync_stream) {
     CUDA_RETURN_IF_ERROR(cudaStreamSynchronize(static_cast<cudaStream_t>(GetComputeStream())));
   }
@@ -411,8 +422,11 @@ Status CUDAExecutionProvider::OnRunEnd(bool sync_stream) {
   if (!IsGraphCaptureEnabled()) {
     ReleasePerThreadContext();
   }
+
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   std::lock_guard<OrtMutex> lock(deferred_release_cpu_ptr_mutex_);
   deferred_release_cpu_ptr_[current_deferred_release_event].recorded = true;
+#endif
 
   return Status::OK();
 }

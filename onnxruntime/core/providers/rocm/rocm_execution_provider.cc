@@ -182,6 +182,7 @@ ROCMExecutionProvider::ROCMExecutionProvider(const ROCMExecutionProviderInfo& in
 }
 
 ROCMExecutionProvider::~ROCMExecutionProvider() {
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   auto cpu_alloc = GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
   {
     std::lock_guard<OrtMutex> lock(deferred_release_cpu_ptr_mutex_);
@@ -198,6 +199,7 @@ ROCMExecutionProvider::~ROCMExecutionProvider() {
       it = deferred_release_cpu_ptr_.erase(it);
     }
   }
+#endif
 
   // clean up thread local context caches
   {
@@ -285,6 +287,7 @@ Status ROCMExecutionProvider::Sync() const {
   return Status::OK();
 }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
 void ROCMExecutionProvider::AddDeferredReleaseCPUPtr(void* p) {
   // when not running in InferenceSession (e.g. Test)
   // it's OK to not remember the deferred release ptr
@@ -297,10 +300,13 @@ void ROCMExecutionProvider::AddDeferredReleaseCPUPtr(void* p) {
     iter->second.cpu_ptrs.push_back(p);
   }
 }
+#endif
 
 Status ROCMExecutionProvider::OnRunStart() {
   // always set ROCM device when session::Run() in case it runs in a worker thread
   HIP_RETURN_IF_ERROR(hipSetDevice(GetDeviceId()));
+
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   auto cpu_alloc = GetAllocator(0, OrtMemTypeCPU);
   // check if hipEvents has passed for deferred release
   // note that we need to take a mutex in case of multi-threaded Run()
@@ -333,19 +339,27 @@ Status ROCMExecutionProvider::OnRunStart() {
   auto& current_deferred_release_event = GetPerThreadContext().GetCurrentDeferredReleaseEvent();
   HIP_RETURN_IF_ERROR(hipEventCreateWithFlags(&current_deferred_release_event, hipEventDisableTiming));
   deferred_release_cpu_ptr_.emplace(current_deferred_release_event, DeferredReleaseCPUPtrs());
+#endif
+
   return Status::OK();
 }
 
 Status ROCMExecutionProvider::OnRunEnd(bool sync_stream) {
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   // record deferred release event on default stream, and release per_thread_context
   auto current_deferred_release_event = GetPerThreadContext().GetCurrentDeferredReleaseEvent();
   HIP_RETURN_IF_ERROR(hipEventRecord(current_deferred_release_event, static_cast<hipStream_t>(GetComputeStream())));
+#endif
+
   if (sync_stream) {
     HIP_RETURN_IF_ERROR(hipStreamSynchronize(static_cast<hipStream_t>(GetComputeStream())));
   }
   ReleasePerThreadContext();
+
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   std::lock_guard<OrtMutex> lock(deferred_release_cpu_ptr_mutex_);
   deferred_release_cpu_ptr_[current_deferred_release_event].recorded = true;
+#endif
 
   return Status::OK();
 }

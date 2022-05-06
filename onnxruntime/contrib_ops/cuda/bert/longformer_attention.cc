@@ -188,7 +188,6 @@ Status LongformerAttention<T>::ComputeInternal(OpKernelContext* context) const {
   }
 
   CUDA_RETURN_IF_ERROR(cudaStreamSynchronize(stream));
-  this->AddDeferredReleaseCPUPtr(pinned_buffer.release());
   return Status::OK();
 }
 

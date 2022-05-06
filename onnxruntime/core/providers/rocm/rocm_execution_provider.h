@@ -53,7 +53,9 @@ class ROCMExecutionProvider : public IExecutionProvider {
     return GetPerThreadContext().template GetConstOnes<T>(count);
   }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   void AddDeferredReleaseCPUPtr(void* p);
+#endif
 
   template <typename T>
   IAllocatorUniquePtr<T> GetScratchBuffer(size_t count_or_bytes) const {
@@ -99,6 +101,7 @@ class ROCMExecutionProvider : public IExecutionProvider {
   bool external_stream_ = false;
   hipStream_t stream_ = nullptr;
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   struct DeferredReleaseCPUPtrs {
     bool recorded = false;
     std::vector<void*> cpu_ptrs;
@@ -106,6 +109,7 @@ class ROCMExecutionProvider : public IExecutionProvider {
 
   std::unordered_map<hipEvent_t, DeferredReleaseCPUPtrs> deferred_release_cpu_ptr_;
   OrtMutex deferred_release_cpu_ptr_mutex_;
+#endif
 
   class PerThreadContext final {
    public:
@@ -121,9 +125,11 @@ class ROCMExecutionProvider : public IExecutionProvider {
       return miopen_handle_;
     }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
     hipEvent_t& GetCurrentDeferredReleaseEvent() {
       return current_deferred_release_event_;
     }
+#endif
 
     template <typename T>
     const T* GetConstOnes(size_t count) {
@@ -156,10 +162,12 @@ class ROCMExecutionProvider : public IExecutionProvider {
     rocblas_handle rocblas_handle_ = nullptr;
     miopenHandle_t miopen_handle_ = nullptr;
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
     // deferred release for temporary CPU pinned memory used in hipMemcpyAsync
     // note that hipEvent will be assigned at OnRunEnd() when PerThreadContext destory
     // so the ownership is passed to deferred_release_cpu_ptr_
     hipEvent_t current_deferred_release_event_ = nullptr;
+#endif
 
     std::unique_ptr<rocm::IConstantBuffer<float>> constant_ones_float_;
     std::unique_ptr<rocm::IConstantBuffer<double>> constant_ones_double_;

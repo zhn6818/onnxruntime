@@ -130,9 +130,11 @@ class CUDAExecutionProvider : public IExecutionProvider {
       return cudnn_handle_;
     }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
     cudaEvent_t& GetCurrentDeferredReleaseEvent() {
       return current_deferred_release_event_;
     }
+#endif
 
     template <typename T>
     const T* GetConstOnes(size_t count) {
@@ -179,10 +181,12 @@ class CUDAExecutionProvider : public IExecutionProvider {
     cublasHandle_t cublas_handle_ = nullptr;
     cudnnHandle_t cudnn_handle_ = nullptr;
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
     // deferred release for temporary CPU pinned memory used in cudaMemcpyAsync
     // note that cudaEvent will be assigned at OnRunEnd() when PerThreadContext destory
     // so the ownership is passed to deferred_release_cpu_ptr_
     cudaEvent_t current_deferred_release_event_ = nullptr;
+#endif
 
     std::unique_ptr<cuda::IConstantBuffer<float>> constant_ones_float_;
     std::unique_ptr<cuda::IConstantBuffer<double>> constant_ones_double_;

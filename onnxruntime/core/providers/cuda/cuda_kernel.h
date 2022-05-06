@@ -61,9 +61,11 @@ class CudaKernel : public OpKernel {
     return provider_->GetTransientScratchBuffer<T>(count_or_bytes);
   }
 
+#if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
   inline void AddDeferredReleaseCPUPtr(void* p) const {
     provider_->AddDeferredReleaseCPUPtr(p);
   }
+#endif
 
   const cudaDeviceProp& GetDeviceProp() const { return provider_->GetDeviceProp(); }
 
