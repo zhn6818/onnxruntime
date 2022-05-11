@@ -1,3 +1,7 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+# This file is used by "Linux Multi GPU TensorRT CI Pipeline".
 # Tag: nvcr.io/nvidia/tensorrt:21.12-py3
 # Label: com.nvidia.cuda.version: 11.5.0
 # Label: com.nvidia.cudnn.version: 8.3.1.22
