@@ -1,3 +1,7 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+# This file is used by "Npm Packaging Pipeline", "Python Packaging Pipeline (Training CPU)", "Python packaging pipeline", "Zip-Nuget-Java-Nodejs Packaging Pipeline", "Linux CPU CI Pipeline", "Linux CPU Minimal Build E2E CI Pipeline", "Linux DNNL CI Pipeline", "ONNX Runtime React Native CI Pipeline", "onnxruntime-binary-size-checks-ci-pipeline", "orttraining-linux-ci-pipeline", "orttraining-linux-onnx-integration-ci-pipeline".
 FROM quay.io/pypa/manylinux2014_x86_64:latest
 
 ENV PATH /usr/local/gradle/bin:/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

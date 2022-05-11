@@ -1,3 +1,7 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+# This file is used by "Python Packaging Pipeline (Training Cuda 10.2)".
 ARG BASEIMAGE=nvcr.io/nvidia/cuda:10.2-cudnn7-devel-centos7
 ARG POLICY=manylinux2014
 ARG PLATFORM=x86_64

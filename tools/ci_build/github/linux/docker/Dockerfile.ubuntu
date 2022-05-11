@@ -1,3 +1,7 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+# This file is used by "Linux TVM CI Pipeline".
 FROM ubuntu:20.04
 
 ARG PYTHON_VERSION=3.8
