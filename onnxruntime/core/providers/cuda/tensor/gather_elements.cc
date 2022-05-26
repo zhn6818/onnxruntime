@@ -9,15 +9,20 @@
 namespace onnxruntime {
 namespace cuda {
 
+#ifdef ENABLE_TRAINING
+#define CREATE_GATHER_ELEMENTS_KERNEL_DEF (*KernelDefBuilder::Create()).MayStridedInput(1)
+#else
+#define CREATE_GATHER_ELEMENTS_KERNEL_DEF (*KernelDefBuilder::Create())
+#endif
+
 ONNX_OPERATOR_KERNEL_EX(GatherElements, kOnnxDomain, 13, kCudaExecutionProvider,
-                        (*KernelDefBuilder::Create())
-                            .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes())
+                        CREATE_GATHER_ELEMENTS_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes())
                             .TypeConstraint("Tind", std::vector<MLDataType>{DataTypeImpl::GetTensorType<int32_t>(),
                                                                             DataTypeImpl::GetTensorType<int64_t>()}),
                         GatherElements);
 
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(GatherElements, kOnnxDomain, 11, 12, kCudaExecutionProvider,
-                                  (*KernelDefBuilder::Create())
+                                  CREATE_GATHER_ELEMENTS_KERNEL_DEF
                                       .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes())
                                       .TypeConstraint("Tind",
                                                       std::vector<MLDataType>{DataTypeImpl::GetTensorType<int32_t>(),
@@ -30,7 +35,7 @@ bool CanSkip(const TensorShapeVector& input_shape, const TensorShapeVector& indi
 }
 
 bool CanMerge(const TensorShapeVector& input_shape, const TensorShapeVector& indices_shape, size_t src, size_t dst) {
-  return input_shape[src] == indices_shape[src] && input_shape[dst] == indices_shape[dst];
+  return false && input_shape[src] == indices_shape[src] && input_shape[dst] == indices_shape[dst];
 }
 
 void Move(TensorShapeVector& input_shape, TensorShapeVector& indices_shape, size_t src, size_t dst) {
@@ -138,11 +143,11 @@ ONNX_NAMESPACE::TensorProto_DataType GetElementType(size_t element_size) {
   }
 }
 
-#define CASE_GATHER_ELEMENTS_IMPL(type)                                                               \
-  case sizeof(type): {                                                                                \
-    const type* indices_data = reinterpret_cast<const type*>(indices_data_raw);                       \
-    GatherElementsImpl(stream, rank, axis, input_data, input_dim_along_axis, input_stride_along_axis, \
-                       masked_input_strides, indices_data, indices_size, indices_fdms, output_data);  \
+#define CASE_GATHER_ELEMENTS_IMPL(type)                                                                               \
+  case sizeof(type): {                                                                                                \
+    const type* indices_data = reinterpret_cast<const type*>(indices_data_raw);                                       \
+    GatherElementsImpl(stream, rank, axis, input_data, input_dim_along_axis, input_stride_along_axis,                 \
+                       masked_input_strides, indices_data, indices_size, indices_fdms, indices_strides, output_data); \
   } break
 
 template <typename T>
@@ -150,7 +155,7 @@ struct GatherElements::ComputeImpl {
   Status operator()(cudaStream_t stream, const void* input_data_raw, const void* indices_data_raw,
                     void* output_data_raw, const int64_t rank, const int64_t axis, const int64_t input_dim_along_axis,
                     const int64_t input_stride_along_axis, TArray<int64_t>& masked_input_strides,
-                    const int64_t indices_size, TArray<fast_divmod>& indices_fdms,
+                    const int64_t indices_size, TArray<fast_divmod>& indices_fdms, TArray<int64_t>& indices_strides,
                     const size_t index_element_size) const {
     typedef typename ToCudaType<T>::MappedType CudaT;
     const CudaT* input_data = reinterpret_cast<const CudaT*>(input_data_raw);
@@ -198,6 +203,13 @@ Status GatherElements::ComputeInternal(OpKernelContext* context) const {
   CoalesceDimensions(input_shape_vec, indices_shape_vec, axis, new_axis, new_rank, input_stride_along_axis,
                      masked_input_strides, indices_fdms);
 
+  TArray<int64_t> indices_strides;
+#ifdef ENABLE_TRAINING
+  if (!indices_tensor->IsContiguous()) {
+    indices_strides = TArray<int64_t>(indices_tensor->Strides());
+  }
+#endif
+
   // Use element size instead of concrete types so we can specialize less template functions to reduce binary size.
   int dtype = GetElementType(input_tensor->DataType()->Size());
   if (dtype == ONNX_NAMESPACE::TensorProto_DataType_UNDEFINED) {
@@ -205,10 +217,10 @@ Status GatherElements::ComputeInternal(OpKernelContext* context) const {
   }
 
   utils::MLTypeCallDispatcher<int8_t, MLFloat16, float, double> t_disp(dtype);
-  return t_disp.InvokeRet<Status, ComputeImpl>(Stream(), input_tensor->DataRaw(), indices_tensor->DataRaw(),
-                                               output_tensor->MutableDataRaw(), new_rank, new_axis,
-                                               input_shape_vec[new_axis], input_stride_along_axis, masked_input_strides,
-                                               indices_size, indices_fdms, indices_tensor->DataType()->Size());
+  return t_disp.InvokeRet<Status, ComputeImpl>(
+      Stream(), input_tensor->DataRaw(), indices_tensor->DataRaw(), output_tensor->MutableDataRaw(), new_rank, new_axis,
+      input_shape_vec[new_axis], input_stride_along_axis, masked_input_strides, indices_size, indices_fdms,
+      indices_strides, indices_tensor->DataType()->Size());
 }
 
 }  // namespace cuda

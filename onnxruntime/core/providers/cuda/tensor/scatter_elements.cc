@@ -38,7 +38,7 @@ ONNX_OPERATOR_KERNEL_EX(ScatterElements, kOnnxDomain, 13, kCudaExecutionProvider
     const type* indices_data = reinterpret_cast<const type*>(indices_data_raw);                                        \
     ORT_RETURN_IF_ERROR(ScatterElementsImpl(stream, rank, axis, input_data, input_size, input_dim_along_axis,          \
                                             input_stride_along_axis, masked_input_strides, indices_data, indices_size, \
-                                            indices_fdms, updates_data, output_data));                                 \
+                                            indices_fdms, TArray<int64_t>(), updates_data, output_data));              \
   } break
 
 template <typename T>
