@@ -206,7 +206,7 @@ struct ProviderHostImpl : ProviderHost {
   bool RocmCall_true(int retCode, const char* exprString, const char* libName, int successCode, const char* msg) override { return GetProviderInfo_ROCM().RocmCall_true(retCode, exprString, libName, successCode, msg); }
 #endif
 
-  std::string GetEnvironmentVar(const std::string& var_name) override { return Env::Default().GetEnvironmentVar(var_name); }
+  std::string GetEnvironmentVar(const std::string& var_name) override { return PlatformApi::GetEnvironmentVar(var_name); }
 
   std::unordered_set<NodeIndex> GetCpuPreferredNodes(const onnxruntime::GraphViewer& graph,
                                                      const std::string& provider_type,
@@ -962,18 +962,18 @@ struct ProviderSharedLibrary {
     if (handle_)
       return;
 
-    std::string full_path = Env::Default().GetRuntimePath() + std::string(LIBRARY_PREFIX "onnxruntime_providers_shared" LIBRARY_EXTENSION);
-    ORT_THROW_IF_ERROR(Env::Default().LoadDynamicLibrary(full_path, true /*shared_globals on unix*/, &handle_));
+    std::string full_path = PlatformApi::GetRuntimePath() + std::string(LIBRARY_PREFIX "onnxruntime_providers_shared" LIBRARY_EXTENSION);
+    ORT_THROW_IF_ERROR(PlatformApi::LoadDynamicLibrary(full_path, true /*shared_globals on unix*/, &handle_));
 
     void (*PProvider_SetHost)(void*);
-    ORT_THROW_IF_ERROR(Env::Default().GetSymbolFromLibrary(handle_, "Provider_SetHost", (void**)&PProvider_SetHost));
+    ORT_THROW_IF_ERROR(PlatformApi::GetSymbolFromLibrary(handle_, "Provider_SetHost", (void**)&PProvider_SetHost));
 
     PProvider_SetHost(&provider_host_);
   }
 
   void Unload() {
     if (handle_) {
-      auto status = Env::Default().UnloadDynamicLibrary(handle_);
+      auto status = PlatformApi::UnloadDynamicLibrary(handle_);
       if (!status.IsOK()) {
         LOGS_DEFAULT(ERROR) << status.ErrorMessage();
       }
@@ -1013,11 +1013,11 @@ struct ProviderLibrary {
       if (!provider_) {
         s_library_shared.Ensure();
 
-        std::string full_path = Env::Default().GetRuntimePath() + std::string(filename_);
-        ORT_THROW_IF_ERROR(Env::Default().LoadDynamicLibrary(full_path, false, &handle_));
+        std::string full_path = PlatformApi::GetRuntimePath() + std::string(filename_);
+        ORT_THROW_IF_ERROR(PlatformApi::LoadDynamicLibrary(full_path, false, &handle_));
 
         Provider* (*PGetProvider)();
-        ORT_THROW_IF_ERROR(Env::Default().GetSymbolFromLibrary(handle_, "GetProvider", (void**)&PGetProvider));
+        ORT_THROW_IF_ERROR(PlatformApi::GetSymbolFromLibrary(handle_, "GetProvider", (void**)&PGetProvider));
 
         provider_ = PGetProvider();
         provider_->Initialize();
@@ -1039,7 +1039,7 @@ struct ProviderLibrary {
         provider_->Shutdown();
 
       if (unload_) {
-        auto status = Env::Default().UnloadDynamicLibrary(handle_);
+        auto status = PlatformApi::UnloadDynamicLibrary(handle_);
         if (!status.IsOK()) {
           LOGS_DEFAULT(ERROR) << status.ErrorMessage();
         }

@@ -19,7 +19,7 @@ static constexpr const char* kAllowReleasedONNXOpsetOnly = "ALLOW_RELEASED_ONNX_
 inline bool IsAllowReleasedONNXOpsetsOnlySet() {
   // Get the value of env variable kAllowReleasedONNXOpsetOnly
   const std::string allow_official_onnx_release_only_str =
-      Env::Default().GetEnvironmentVar(model_load_utils::kAllowReleasedONNXOpsetOnly);
+      PlatformApi::GetEnvironmentVar(model_load_utils::kAllowReleasedONNXOpsetOnly);
 
   if (!allow_official_onnx_release_only_str.empty()) {
     // Check if the env var contains an unsupported value

@@ -32,15 +32,15 @@ Status FuncManager::GetFuncs(const std::string& name, const NodeComputeInfo*& co
     void* handle = nullptr;
     ORT_RETURN_IF_ERROR(lib_loader_.LoadExternalLib(it->second.dso_path, &handle));
     void* create_func_symbol_handle = nullptr;
-    ORT_RETURN_IF_ERROR(Env::Default().GetSymbolFromLibrary(handle,
+    ORT_RETURN_IF_ERROR(PlatformApi::GetSymbolFromLibrary(handle,
                                                             kCreateStateFuncSymbol + name,
                                                             &create_func_symbol_handle));
     void* compute_func_symbol_handle = nullptr;
-    ORT_RETURN_IF_ERROR(Env::Default().GetSymbolFromLibrary(handle,
+    ORT_RETURN_IF_ERROR(PlatformApi::GetSymbolFromLibrary(handle,
                                                             kComputeFuncSymbol + name,
                                                             &compute_func_symbol_handle));
     void* release_func_symbol_handle = nullptr;
-    ORT_RETURN_IF_ERROR(Env::Default().GetSymbolFromLibrary(handle,
+    ORT_RETURN_IF_ERROR(PlatformApi::GetSymbolFromLibrary(handle,
                                                             kReleaseStateFuncSymbol + name,
                                                             &release_func_symbol_handle));
     it->second.compute_info.compute_func = [=](FunctionState state, const OrtApi* api, OrtKernelContext* context) {

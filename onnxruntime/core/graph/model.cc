@@ -445,7 +445,7 @@ Status Model::Load(ModelProto&& model_proto,
 template <typename T, typename Loader>
 static Status LoadModelHelper(const T& file_path, Loader loader) {
   int fd;
-  Status status = Env::Default().FileOpenRd(file_path, fd);
+  Status status = PlatformApi::FileOpenRd(file_path, fd);
   if (!status.IsOK()) {
     if (status.Category() == common::SYSTEM) {
       switch (status.Code()) {
@@ -471,10 +471,10 @@ static Status LoadModelHelper(const T& file_path, Loader loader) {
 
   if (!status.IsOK()) {
     GSL_SUPPRESS(es .84)
-    ORT_IGNORE_RETURN_VALUE(Env::Default().FileClose(fd));
+    ORT_IGNORE_RETURN_VALUE(PlatformApi::FileClose(fd));
     return status;
   }
-  return Env::Default().FileClose(fd);
+  return PlatformApi::FileClose(fd);
 }
 
 template <typename T>
@@ -500,7 +500,7 @@ static Status LoadModel(const T& file_path, std::shared_ptr<Model>& p_model,
 template <typename T>
 static Status SaveModel(Model& model, const T& file_path) {
   int fd;
-  Status status = Env::Default().FileOpenWr(file_path, fd);
+  Status status = PlatformApi::FileOpenWr(file_path, fd);
   ORT_RETURN_IF_ERROR(status);
 
   ORT_TRY {
@@ -513,10 +513,10 @@ static Status SaveModel(Model& model, const T& file_path) {
   }
   if (!status.IsOK()) {
     GSL_SUPPRESS(es .84)
-    ORT_IGNORE_RETURN_VALUE(Env::Default().FileClose(fd));
+    ORT_IGNORE_RETURN_VALUE(PlatformApi::FileClose(fd));
     return status;
   }
-  return Env::Default().FileClose(fd);
+  return PlatformApi::FileClose(fd);
 }
 
 #ifdef _WIN32
@@ -531,7 +531,7 @@ static Status SaveModelWithExternalInitializers(Model& model,
                                                 const std::string& external_file_name,
                                                 size_t initializer_size_threshold) {
   int fd = 0;
-  Status status = Env::Default().FileOpenWr(file_path, fd);
+  Status status = PlatformApi::FileOpenWr(file_path, fd);
   ORT_RETURN_IF_ERROR(status);
 
   ORT_TRY {
@@ -545,10 +545,10 @@ static Status SaveModelWithExternalInitializers(Model& model,
   }
   if (!status.IsOK()) {
     GSL_SUPPRESS(es .84)
-    ORT_IGNORE_RETURN_VALUE(Env::Default().FileClose(fd));
+    ORT_IGNORE_RETURN_VALUE(PlatformApi::FileClose(fd));
     return status;
   }
-  return Env::Default().FileClose(fd);
+  return PlatformApi::FileClose(fd);
 }
 
 Status Model::Load(const PathString& file_path,
@@ -620,7 +620,7 @@ Status Model::Load(int fd, ONNX_NAMESPACE::ModelProto& model_proto) {
 #if GOOGLE_PROTOBUF_VERSION >= 3002000
   size_t file_size = 0;
   int block_size = -1;
-  Status st = Env::Default().GetFileLength(fd, file_size);
+  Status st = PlatformApi::GetFileLength(fd, file_size);
   if (st.IsOK()) {
     block_size = std::min(DEFAULT_PROTOBUF_BLOCK_SIZE, static_cast<int>(file_size));
   }

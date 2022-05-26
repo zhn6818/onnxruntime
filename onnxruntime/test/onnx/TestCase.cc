@@ -421,7 +421,7 @@ static bool read_config_file(const std::basic_string<PATH_CHAR_TYPE>& path, std:
 template <typename PATH_STRING_TYPE>
 static void LoadTensor(const PATH_STRING_TYPE& pb_file, ONNX_NAMESPACE::TensorProto& input_pb) {
   int tensor_fd;
-  auto st = Env::Default().FileOpenRd(pb_file, tensor_fd);
+  auto st = PlatformApi::FileOpenRd(pb_file, tensor_fd);
   if (!st.IsOK()) {
     ORT_THROW("open file '", ToUTF8String(pb_file), "' failed:", st.ErrorMessage());
   }
@@ -436,7 +436,7 @@ static void LoadTensor(const PATH_STRING_TYPE& pb_file, ONNX_NAMESPACE::TensorPr
 template <typename PATH_STRING_TYPE>
 static void LoadSequenceTensor(const PATH_STRING_TYPE& pb_file, ONNX_NAMESPACE::SequenceProto& input_pb) {
   int tensor_fd;
-  auto st = Env::Default().FileOpenRd(pb_file, tensor_fd);
+  auto st = PlatformApi::FileOpenRd(pb_file, tensor_fd);
   if (!st.IsOK()) {
     ORT_THROW("open file '", ToUTF8String(pb_file), "' failed:", st.ErrorMessage());
   }
@@ -452,7 +452,7 @@ template <typename PATH_STRING_TYPE>
 static void LoadOptional(const PATH_STRING_TYPE& pb_file,
                          ONNX_NAMESPACE::OptionalProto& input_pb) {
   int tensor_fd;
-  auto st = Env::Default().FileOpenRd(pb_file, tensor_fd);
+  auto st = PlatformApi::FileOpenRd(pb_file, tensor_fd);
   if (!st.IsOK()) {
     ORT_THROW("open file '", ToUTF8String(pb_file), "' failed:", st.ErrorMessage());
   }
@@ -474,7 +474,7 @@ void OnnxTestCase::LoadTestData(size_t id, onnxruntime::test::HeapBuffer& b,
   PATH_STRING_TYPE test_data_pb = ConcatPathComponent<PATH_CHAR_TYPE>(
       test_data_dirs_[id], (is_input ? ORT_TSTR("inputs.pb") : ORT_TSTR("outputs.pb")));
   int test_data_pb_fd;
-  auto st = Env::Default().FileOpenRd(test_data_pb, test_data_pb_fd);
+  auto st = PlatformApi::FileOpenRd(test_data_pb, test_data_pb_fd);
   if (st.IsOK()) {  //has an all-in-one input file
     std::ostringstream oss;
     {

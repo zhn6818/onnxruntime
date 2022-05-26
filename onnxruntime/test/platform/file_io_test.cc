@@ -89,7 +89,7 @@ TEST(FileIoTest, ReadFileIntoBuffer) {
     const auto length = offset_and_length.second;
 
     auto buffer_span = gsl::make_span(buffer.data(), length);
-    auto status = Env::Default().ReadFileIntoBuffer(tmp.path.c_str(), offset, length, buffer_span);
+    auto status = PlatformApi::ReadFileIntoBuffer(tmp.path.c_str(), offset, length, buffer_span);
     ASSERT_TRUE(status.IsOK())
         << "ReadFileIntoBuffer failed for offset " << offset << " and length " << length
         << " with error: " << status.ErrorMessage();
@@ -100,13 +100,13 @@ TEST(FileIoTest, ReadFileIntoBuffer) {
   }
 
   // invalid - negative offset
-  ASSERT_FALSE(Env::Default().ReadFileIntoBuffer(tmp.path.c_str(), -1, 0, gsl::make_span(buffer)).IsOK());
+  ASSERT_FALSE(PlatformApi::ReadFileIntoBuffer(tmp.path.c_str(), -1, 0, gsl::make_span(buffer)).IsOK());
 
   // invalid - length too long
-  ASSERT_FALSE(Env::Default().ReadFileIntoBuffer(tmp.path.c_str(), 0, expected_data.size() + 1, gsl::make_span(buffer)).IsOK());
+  ASSERT_FALSE(PlatformApi::ReadFileIntoBuffer(tmp.path.c_str(), 0, expected_data.size() + 1, gsl::make_span(buffer)).IsOK());
 
   // invalid - buffer too short
-  ASSERT_FALSE(Env::Default().ReadFileIntoBuffer(tmp.path.c_str(), 0, 3, gsl::make_span(buffer.data(), 2)).IsOK());
+  ASSERT_FALSE(PlatformApi::ReadFileIntoBuffer(tmp.path.c_str(), 0, 3, gsl::make_span(buffer.data(), 2)).IsOK());
 }
 
 #ifndef _WIN32  // not implemented on Windows
@@ -125,7 +125,7 @@ TEST(FileIoTest, MapFileIntoMemory) {
     const auto length = offset_and_length.second;
 
     Env::MappedMemoryPtr mapped_memory{};
-    auto status = Env::Default().MapFileIntoMemory(tmp.path.c_str(), offset, length, mapped_memory);
+    auto status = PlatformApi::MapFileIntoMemory(tmp.path.c_str(), offset, length, mapped_memory);
     ASSERT_TRUE(status.IsOK())
         << "MapFileIntoMemory failed for offset " << offset << " and length " << length
         << " with error: " << status.ErrorMessage();
@@ -141,7 +141,7 @@ TEST(FileIoTest, MapFileIntoMemory) {
     Env::MappedMemoryPtr mapped_memory{};
 
     // invalid - negative offset
-    ASSERT_FALSE(Env::Default().MapFileIntoMemory(tmp.path.c_str(), -1, 0, mapped_memory).IsOK());
+    ASSERT_FALSE(PlatformApi::MapFileIntoMemory(tmp.path.c_str(), -1, 0, mapped_memory).IsOK());
   }
 }
 #endif

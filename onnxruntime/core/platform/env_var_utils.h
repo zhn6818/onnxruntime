@@ -15,7 +15,7 @@ namespace onnxruntime {
 template <typename T>
 optional<T> ParseEnvironmentVariable(const std::string& name) {
 #ifndef SHARED_PROVIDER
-  const std::string value_str = Env::Default().GetEnvironmentVar(name);
+  const std::string value_str = PlatformApi::GetEnvironmentVar(name);
 #else
   const std::string value_str = GetEnvironmentVar(name);
 #endif

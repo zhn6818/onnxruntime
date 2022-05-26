@@ -76,16 +76,16 @@ void DumpTensorToFile(const Tensor& tensor, const std::string& tensor_name, cons
   auto tensor_proto = utils::TensorToTensorProto(tensor, tensor_name);
   const PathString file_path_str = file_path.ToPathString();
   int output_fd;
-  ORT_THROW_IF_ERROR(Env::Default().FileOpenWr(file_path_str, output_fd));
+  ORT_THROW_IF_ERROR(PlatformApi::FileOpenWr(file_path_str, output_fd));
   try {
     ORT_ENFORCE(
         tensor_proto.SerializeToFileDescriptor(output_fd),
         "Failed to write tensor to file - tensor: ", tensor_name, ", file: ", ToUTF8String(file_path_str));
   } catch (...) {
-    ORT_IGNORE_RETURN_VALUE(Env::Default().FileClose(output_fd));
+    ORT_IGNORE_RETURN_VALUE(PlatformApi::FileClose(output_fd));
     throw;
   }
-  ORT_THROW_IF_ERROR(Env::Default().FileClose(output_fd));
+  ORT_THROW_IF_ERROR(PlatformApi::FileClose(output_fd));
 }
 
 #ifdef DEBUG_NODE_INPUTS_OUTPUTS_ENABLE_DUMP_TO_SQLDB
@@ -93,7 +93,7 @@ sqlite3* SqliteConnection() {
   static thread_local std::unique_ptr<sqlite3, decltype(&sqlite3_close)> sqlite_db(
       []() {
         std::stringstream ss;
-        ss << "-pid" << Env::Default().GetSelfPid() << ".db";
+        ss << "-pid" << PlatformApi::GetSelfPid() << ".db";
         const auto& opt = NodeDumpOptionsFromEnvironmentVariables();
         auto sqlite_db_prefix = opt.sqlite_db_prefix;
         auto sqlite_db_path = sqlite_db_prefix.Concat(ss.str()).ToPathString();
@@ -152,10 +152,10 @@ void SqlStepWithRetry(sqlite3_stmt* stmt, int sql_expected) {
 
     if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
       if (attempt % 10000 == 0) {
-        std::cerr << "Warning: Pid " << Env::Default().GetSelfPid()
+        std::cerr << "Warning: Pid " << PlatformApi::GetSelfPid()
                   << " gently spinning on sql db busy or locked\n";
       }
-      Env::Default().SleepForMicroseconds(100);
+      PlatformApi::SleepForMicroseconds(100);
       attempt++;
       continue;
     }
@@ -377,8 +377,8 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
       opts.dump_flags |= NodeDumpOptions::DumpFlags::NodePlacement;
     }
 
-    opts.filter.name_pattern = Env::Default().GetEnvironmentVar(env_vars::kNameFilter);
-    opts.filter.op_type_pattern = Env::Default().GetEnvironmentVar(env_vars::kOpTypeFilter);
+    opts.filter.name_pattern = PlatformApi::GetEnvironmentVar(env_vars::kNameFilter);
+    opts.filter.op_type_pattern = PlatformApi::GetEnvironmentVar(env_vars::kOpTypeFilter);
 
     const std::string destination = ParseEnvironmentVariableWithDefault<std::string>(
         env_vars::kDumpDataDestination, "stdout");
@@ -396,7 +396,7 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
     opts.snippet_edge_items = ParseEnvironmentVariableWithDefault<int>(env_vars::kSnippetEdgeItems, kDefaultSnippetEdgeItems);
 
     if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kAppendRankToFileName, false)) {
-      std::string rank = Env::Default().GetEnvironmentVar("OMPI_COMM_WORLD_RANK");
+      std::string rank = PlatformApi::GetEnvironmentVar("OMPI_COMM_WORLD_RANK");
       if (rank.empty()) {
         opts.file_suffix = "_default_rank_0";
       } else {
@@ -404,7 +404,7 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
       }
     }
 
-    opts.output_dir = Path::Parse(ToPathString(Env::Default().GetEnvironmentVar(env_vars::kOutputDir)));
+    opts.output_dir = Path::Parse(ToPathString(PlatformApi::GetEnvironmentVar(env_vars::kOutputDir)));
 
     std::string sqlite_db_prefix =
         ParseEnvironmentVariableWithDefault<std::string>(env_vars::kSqliteDbPrefix, "execution-trace");

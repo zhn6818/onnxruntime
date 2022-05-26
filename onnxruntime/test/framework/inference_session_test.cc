@@ -1667,7 +1667,7 @@ TEST(InferenceSessionTests, TestTruncatedSequence) {
   // This model is a 4x forward LSTM. Parse it to find out mapping between init_state input/output
   ONNX_NAMESPACE::ModelProto model_proto;
   int model_fd;
-  auto status = Env::Default().FileOpenRd(LSTM_MODEL_URI, model_fd);
+  auto status = PlatformApi::FileOpenRd(LSTM_MODEL_URI, model_fd);
   ASSERT_TRUE(status.IsOK());
   google::protobuf::io::FileInputStream f(model_fd);
   f.SetCloseOnDelete(true);

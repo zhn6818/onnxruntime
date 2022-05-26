@@ -167,7 +167,7 @@ static Status ReadExternalDataForTensor(const ONNX_NAMESPACE::TensorProto& tenso
       tensor_byte_size));
 
   unpacked_tensor.resize(tensor_byte_size);
-  ORT_RETURN_IF_ERROR(onnxruntime::Env::Default().ReadFileIntoBuffer(
+  ORT_RETURN_IF_ERROR(onnxruntime::PlatformApi::ReadFileIntoBuffer(
       external_file_path.c_str(),
       file_offset,
       tensor_byte_size,

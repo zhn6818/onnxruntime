@@ -989,7 +989,7 @@ static Status LoadOrtModelBytes(const std::basic_string<T>& model_uri,
                                 std::vector<uint8_t>& bytes_data_holder) {
   size_t num_bytes = 0;
   model_location = ToWideString(model_uri);
-  ORT_RETURN_IF_ERROR(Env::Default().GetFileLength(model_location.c_str(), num_bytes));
+  ORT_RETURN_IF_ERROR(PlatformApi::GetFileLength(model_location.c_str(), num_bytes));
 
   bytes_data_holder.resize(num_bytes);
 

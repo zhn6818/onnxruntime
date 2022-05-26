@@ -307,13 +307,13 @@ static std::unique_ptr<onnxruntime::IExecutionProvider> LoadExecutionProvider(
     const ProviderOptions& provider_options = {},
     const std::string& entry_symbol_name = "GetProvider") {
   void* handle;
-  auto error = Env::Default().LoadDynamicLibrary(ep_shared_lib_path, false, &handle);
+  auto error = PlatformApi::LoadDynamicLibrary(ep_shared_lib_path, false, &handle);
   if (!error.IsOK()) {
     throw std::runtime_error(error.ErrorMessage());
   }
 
   Provider* (*PGetProvider)();
-  OrtPybindThrowIfError(Env::Default().GetSymbolFromLibrary(handle, entry_symbol_name, (void**)&PGetProvider));
+  OrtPybindThrowIfError(PlatformApi::GetSymbolFromLibrary(handle, entry_symbol_name, (void**)&PGetProvider));
 
   Provider* provider = PGetProvider();
   std::shared_ptr<IExecutionProviderFactory> ep_factory = provider->CreateExecutionProviderFactory(&provider_options);
@@ -372,7 +372,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #ifdef USE_TENSORRT
     // If the environment variable 'ORT_TENSORRT_UNAVAILABLE' exists, then we do not load TensorRT. This is set by _ld_preload for the manylinux case
     // as in that case, trying to load the library itself will result in a crash due to the way that auditwheel strips dependencies.
-    if (Env::Default().GetEnvironmentVar("ORT_TENSORRT_UNAVAILABLE").empty()) {
+    if (PlatformApi::GetEnvironmentVar("ORT_TENSORRT_UNAVAILABLE").empty()) {
       std::string calibration_table, cache_path, lib_path;
       auto it = provider_options_map.find(type);
       if (it != provider_options_map.end()) {
@@ -534,7 +534,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #ifdef USE_CUDA
     // If the environment variable 'CUDA_UNAVAILABLE' exists, then we do not load cuda. This is set by _ld_preload for the manylinux case
     // as in that case, trying to load the library itself will result in a crash due to the way that auditwheel strips dependencies.
-    if (Env::Default().GetEnvironmentVar("ORT_CUDA_UNAVAILABLE").empty()) {
+    if (PlatformApi::GetEnvironmentVar("ORT_CUDA_UNAVAILABLE").empty()) {
       if (auto* cuda_provider_info = TryGetProviderInfo_CUDA()) {
         const CUDAExecutionProviderInfo info = GetCudaExecutionProviderInfo(cuda_provider_info,
                                                                             provider_options_map);
@@ -545,7 +545,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
         external_allocator_info = info.external_allocator_info;
         return cuda_provider_info->CreateExecutionProviderFactory(info)->CreateProvider();
       } else {
-        if (!Env::Default().GetEnvironmentVar("CUDA_PATH").empty()) {
+        if (!PlatformApi::GetEnvironmentVar("CUDA_PATH").empty()) {
           ORT_THROW("CUDA_PATH is set but CUDA wasn't able to be loaded. Please install the correct version of CUDA and cuDNN as mentioned in the GPU requirements page (https://onnxruntime.ai/docs/reference/execution-providers/CUDA-ExecutionProvider.html#requirements), make sure they're in the PATH, and that your GPU is supported.");
         }
       }
@@ -564,7 +564,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
       external_allocator_info = info.external_allocator_info;
       return rocm_provider_info->CreateExecutionProviderFactory(info)->CreateProvider();
     } else {
-      if (!Env::Default().GetEnvironmentVar("ROCM_PATH").empty()) {
+      if (!PlatformApi::GetEnvironmentVar("ROCM_PATH").empty()) {
         ORT_THROW("ROCM_PATH is set but ROCM wasn't able to be loaded. Please install the correct version of ROCM and MIOpen as mentioned in the GPU requirements page, make sure they're in the PATH, and that your GPU is supported.");
       }
     }
@@ -633,7 +633,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
       openvino_device_type.clear();
       return p;
     } else {
-      if (!Env::Default().GetEnvironmentVar("INTEL_OPENVINO_DIR").empty()) {
+      if (!PlatformApi::GetEnvironmentVar("INTEL_OPENVINO_DIR").empty()) {
         ORT_THROW("INTEL_OPENVINO_DIR is set but OpenVINO library wasn't able to be loaded. Please install a supported version of OpenVINO as mentioned in the requirements page (https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html#requirements), ensure dependency libraries are in the PATH and your hardware is supported.");
       } else {
         LOGS_DEFAULT(WARNING) << "Failed to create " << type << ". Please reference https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html#requirements to ensure all dependencies are met.";
@@ -1609,7 +1609,7 @@ void InitializeEnv() {
   auto initialize = [&]() {
     // Initialization of the module
     InitArray();
-    Env::Default().GetTelemetryProvider().SetLanguageProjection(OrtLanguageProjection::ORT_PROJECTION_PYTHON);
+    PlatformApi::GetTelemetryProvider().SetLanguageProjection(OrtLanguageProjection::ORT_PROJECTION_PYTHON);
     OrtPybindThrowIfError(Environment::Create(std::make_unique<LoggingManager>(
                                                   std::make_unique<CLogSink>(),
                                                   Severity::kWARNING, false, LoggingManager::InstanceType::Default,

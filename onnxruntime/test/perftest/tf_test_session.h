@@ -49,11 +49,11 @@ class TensorflowTestSession : public TestSession {
       : rand_engine_(rd()) {
     const auto& model_file_path = performance_test_config.model_info.model_file_path;
     size_t model_file_length;
-    auto status = Env::Default().GetFileLength(model_file_path.c_str(), model_file_length);
+    auto status = PlatformApi::GetFileLength(model_file_path.c_str(), model_file_length);
     if (!status.IsOK()) ORT_THROW(status.ErrorMessage());
     model_data_.resize(model_file_length);
     auto model_data_span = gsl::make_span(model_data_);
-    status = Env::Default().ReadFileIntoBuffer(model_file_path.c_str(), 0, model_file_length, model_data_span);
+    status = PlatformApi::ReadFileIntoBuffer(model_file_path.c_str(), 0, model_file_length, model_data_span);
     if (!status.IsOK()) {
       ORT_THROW("read file ", model_file_path, " failed: ", status.ErrorMessage());
     }

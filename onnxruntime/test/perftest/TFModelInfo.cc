@@ -22,7 +22,7 @@ std::unique_ptr<TestModelInfo> TFModelInfo::Create(_In_ const PATH_CHAR_TYPE* mo
   std::string file_content;
   file_content.resize(len);
   auto buffer_span = gsl::make_span(&file_content[0], file_content.size());
-  status = onnxruntime::Env::Default().ReadFileIntoBuffer(meta_file_path.c_str(), 0, len, buffer_span);
+  status = onnxruntime::PlatformApi::ReadFileIntoBuffer(meta_file_path.c_str(), 0, len, buffer_span);
   if (!status.IsOK()) {
     ORT_THROW(status.ErrorMessage());
   }

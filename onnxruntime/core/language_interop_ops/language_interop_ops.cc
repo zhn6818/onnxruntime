@@ -24,7 +24,7 @@ void LoadInterOp(const std::basic_string<ORTCHAR_T>& model_uri, InterOpDomains& 
 
   // match the error message from model.cc to keep the nodejs tests happy.
   // as this is deprecated just cut-and-paste equivalent code for now.
-  auto status = Env::Default().FileOpenRd(model_uri, fd);
+  auto status = PlatformApi::FileOpenRd(model_uri, fd);
   if (!status.IsOK()) {
     if (status.Category() == common::SYSTEM) {
       switch (status.Code()) {

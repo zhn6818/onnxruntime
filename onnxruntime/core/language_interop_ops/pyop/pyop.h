@@ -1,6 +1,6 @@
 #pragma once
 #include "core/platform/env.h"
-#define LOAD_PYOP_SYM(n,v,m) ORT_ENFORCE(Env::Default().GetSymbolFromLibrary(handle_,n,reinterpret_cast<void**>(&v))==Status::OK(),m)
+#define LOAD_PYOP_SYM(n,v,m) ORT_ENFORCE(PlatformApi::GetSymbolFromLibrary(handle_,n,reinterpret_cast<void**>(&v))==Status::OK(),m)
 #include "core/framework/ort_value.h"
 #include "core/session/onnxruntime_cxx_api.h"
 #include "core/framework/op_kernel_context_internal.h"

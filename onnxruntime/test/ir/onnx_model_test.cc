@@ -102,7 +102,7 @@ TEST_F(ONNXModelsTest, bvlc_alexnet_1) {
   using ::google::protobuf::io::FileInputStream;
   using ::google::protobuf::io::ZeroCopyInputStream;
   int fd;
-  ASSERT_STATUS_OK(Env::Default().FileOpenRd(ORT_TSTR("../models/opset8/test_bvlc_alexnet/model.onnx"), fd));
+  ASSERT_STATUS_OK(PlatformApi::FileOpenRd(ORT_TSTR("../models/opset8/test_bvlc_alexnet/model.onnx"), fd));
   ASSERT_TRUE(fd > 0);
   std::unique_ptr<ZeroCopyInputStream> raw_input(new FileInputStream(fd));
   std::unique_ptr<CodedInputStream> coded_input(new CodedInputStream(raw_input.get()));
@@ -113,7 +113,7 @@ TEST_F(ONNXModelsTest, bvlc_alexnet_1) {
   coded_input.reset();
   raw_input.reset();
   EXPECT_TRUE(result);
-  ASSERT_STATUS_OK(Env::Default().FileClose(fd));
+  ASSERT_STATUS_OK(PlatformApi::FileClose(fd));
 
   std::shared_ptr<Model> model;
   ASSERT_STATUS_OK(Model::Load(ORT_TSTR("../models/opset8/test_bvlc_alexnet/model.onnx"), model, nullptr,
@@ -138,7 +138,7 @@ TEST_P(ONNXModelsTest1, LoadFromProtobuf) {
   using ::google::protobuf::io::FileInputStream;
   using ::google::protobuf::io::ZeroCopyInputStream;
   int fd;
-  ASSERT_STATUS_OK(Env::Default().FileOpenRd(GetModelFileName(), fd));
+  ASSERT_STATUS_OK(PlatformApi::FileOpenRd(GetModelFileName(), fd));
   ASSERT_TRUE(fd > 0);
   std::unique_ptr<ZeroCopyInputStream> raw_input(new FileInputStream(fd));
   std::unique_ptr<CodedInputStream> coded_input(new CodedInputStream(raw_input.get()));
@@ -148,7 +148,7 @@ TEST_P(ONNXModelsTest1, LoadFromProtobuf) {
   coded_input.reset();
   raw_input.reset();
   ASSERT_TRUE(result);
-  ASSERT_STATUS_OK(Env::Default().FileClose(fd));
+  ASSERT_STATUS_OK(PlatformApi::FileClose(fd));
   std::shared_ptr<Model> model;
   ASSERT_STATUS_OK(Model::Load(std::move(model_proto), model, nullptr,
                                *logger_));

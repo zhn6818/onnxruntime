@@ -23,7 +23,7 @@ CreateThreadPoolHelper(Env* env, OrtThreadPoolParams options) {
     to.affinity.assign(options.affinity_vec, options.affinity_vec + options.affinity_vec_len);
   }
   if (options.thread_pool_size <= 0) {  // default
-    cpu_list = Env::Default().GetThreadAffinityMasks();
+    cpu_list = PlatformApi::GetThreadAffinityMasks();
     if (cpu_list.empty() || cpu_list.size() == 1)
       return nullptr;
     options.thread_pool_size = static_cast<int>(cpu_list.size());

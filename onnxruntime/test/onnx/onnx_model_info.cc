@@ -40,7 +40,7 @@ static void RepeatedPtrFieldToVector(const ::google::protobuf::RepeatedPtrField<
 
 void OnnxModelInfo::InitOnnxModelInfo(_In_ const PATH_CHAR_TYPE* model_url) {  // parse model
   int model_fd;
-  auto st = Env::Default().FileOpenRd(model_url, model_fd);
+  auto st = PlatformApi::FileOpenRd(model_url, model_fd);
   if (!st.IsOK()) {
     ORT_THROW(st.ErrorMessage());
   }
@@ -49,10 +49,10 @@ void OnnxModelInfo::InitOnnxModelInfo(_In_ const PATH_CHAR_TYPE* model_url) {  /
   ::google::protobuf::io::FileInputStream input(model_fd, protobuf_block_size_in_bytes);
   const bool parse_result = model_pb.ParseFromZeroCopyStream(&input) && input.GetErrno() == 0;
   if (!parse_result) {
-    (void)Env::Default().FileClose(model_fd);
+    (void)PlatformApi::FileClose(model_fd);
     ORT_THROW("Failed to load model because protobuf parsing failed.");
   }
-  (void)Env::Default().FileClose(model_fd);
+  (void)PlatformApi::FileClose(model_fd);
   {
     const RE2::Anchor re2_anchor = RE2::UNANCHORED;
     const std::string model_url_string = ToUTF8String(model_url);
@@ -97,7 +97,7 @@ void OnnxModelInfo::InitOrtModelInfo(_In_ const PATH_CHAR_TYPE* model_url) {
   std::vector<uint8_t> bytes;
   size_t num_bytes = 0;
   const auto model_location = ToWideString(model_url);
-  ORT_THROW_IF_ERROR(Env::Default().GetFileLength(model_location.c_str(), num_bytes));
+  ORT_THROW_IF_ERROR(PlatformApi::GetFileLength(model_location.c_str(), num_bytes));
   bytes.resize(num_bytes);
   std::ifstream bytes_stream(model_location, std::ifstream::in | std::ifstream::binary);
   bytes_stream.read(reinterpret_cast<char*>(bytes.data()), num_bytes);
