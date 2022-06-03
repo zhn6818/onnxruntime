@@ -4,6 +4,7 @@
 #include "dnnl_gelu.h"
 #include "dnnl_subgraph.h"
 #include "dnnl_subgraph_primitive.h"
+#include "dnnl_util.h"
 
 namespace onnxruntime {
 namespace ort_dnnl {
@@ -68,14 +69,7 @@ void DnnlGelu::CreatePrimitive(DnnlSubgraphPrimitive& sp, DnnlNode& node) {
 
   }
 
-  dnnl::algorithm algo;
-  if (node.OpType() == "Gelu" || node.OpType() == "BiasGelu") {
-    algo = dnnl::algorithm::eltwise_gelu_erf;
-  } else if (node.OpType() == "FastGelu") {
-    algo = dnnl::algorithm::eltwise_gelu_tanh;
-  } else {
-    ORT_THROW("op type not supported");
-  }
+  dnnl::algorithm algo = dnnl_util::OrtOperatorToDnnlAlgorithm(node.OpType());
   auto gelu_desc = dnnl::eltwise_forward::desc(dnnl::prop_kind::forward_inference, algo, gelu_src_mem.get_desc());
   auto gelu_pd = dnnl::eltwise_forward::primitive_desc(gelu_desc, dnnl_engine);
 
@@ -89,7 +83,11 @@ void DnnlGelu::CreatePrimitive(DnnlSubgraphPrimitive& sp, DnnlNode& node) {
   sp.AddPrimitive(gelu_op, {{DNNL_ARG_SRC, gelu_src_mem},
                             {DNNL_ARG_DST, dst_mem}});
 
-  sp.SetMemory(node.Output(OUT_Y), dst_mem);
+  if (sp.IsScalar(node.Input(IN_X))) {
+    sp.SetMemory(node.Output(OUT_Y), dst_mem, false, true);
+  } else {
+    sp.SetMemory(node.Output(OUT_Y), dst_mem);
+  }
 }
 
 }  // namespace ort_dnnl

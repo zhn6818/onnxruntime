@@ -12,10 +12,12 @@
 #include "core/mlas/inc/mlas.h"
 
 namespace onnxruntime {
-ONNX_OPERATOR_KERNEL_EX(
+// uint8_t kernel supports weight being either uint8_t or int8_t
+ONNX_OPERATOR_TYPED_KERNEL_EX(
     QLinearMatMul,
     kOnnxDomain,
     10,
+    uint8_t,
     kCpuExecutionProvider,
     KernelDefBuilder()
         .TypeConstraint("T1", DataTypeImpl::GetTensorType<uint8_t>())
@@ -23,20 +25,21 @@ ONNX_OPERATOR_KERNEL_EX(
         .TypeConstraint("T3", DataTypeImpl::GetTensorType<uint8_t>()),
     QLinearMatMul);
 
-#define REGISTER_QLINEARMATMUL_TYPED_KERNEL(act_type, weight_type)          \
-  ONNX_OPERATOR_TYPED_KERNEL_EX(                                            \
-      QLinearMatMul,                                                        \
-      kOnnxDomain,                                                          \
-      10,                                                                   \
-      act_type##_##weight_type,                                             \
-      kCpuExecutionProvider,                                                \
-      KernelDefBuilder()                                                    \
-          .TypeConstraint("T1", DataTypeImpl::GetTensorType<act_type>())    \
-          .TypeConstraint("T2", DataTypeImpl::GetTensorType<weight_type>()) \
-          .TypeConstraint("T3", DataTypeImpl::GetTensorType<act_type>()),   \
+// int8_t kernel only supports weight being int8_t
+#define REGISTER_QLINEARMATMUL_INT8_KERNEL()                            \
+  ONNX_OPERATOR_TYPED_KERNEL_EX(                                        \
+      QLinearMatMul,                                                    \
+      kOnnxDomain,                                                      \
+      10,                                                               \
+      int8_t,                                                           \
+      kCpuExecutionProvider,                                            \
+      KernelDefBuilder()                                                \
+          .TypeConstraint("T1", DataTypeImpl::GetTensorType<int8_t>())  \
+          .TypeConstraint("T2", DataTypeImpl::GetTensorType<int8_t>())  \
+          .TypeConstraint("T3", DataTypeImpl::GetTensorType<int8_t>()), \
       QLinearMatMul);
 
-REGISTER_QLINEARMATMUL_TYPED_KERNEL(int8_t, int8_t);
+REGISTER_QLINEARMATMUL_INT8_KERNEL();
 
 Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   const auto* a = ctx->Input<Tensor>(IN_A);
@@ -92,6 +95,22 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     output_scales[i] = (a_scale_data * b_scale_data[i] / y_scale_data);
   }
 
+#if defined(_M_ARM64) || defined(__aarch64__)
+  std::vector<int32_t> pre_shifts;
+  std::vector<int32_t> multipliers;
+  std::vector<int32_t> post_shifts;
+  if (use_fixed_point_requant_) {
+    pre_shifts.resize(output_scales.size());
+    multipliers.resize(output_scales.size());
+    post_shifts.resize(output_scales.size());
+    MlasFloatToFixedPoint(output_scales.data(),
+                          multipliers.data(),
+                          pre_shifts.data(),
+                          post_shifts.data(),
+                          output_scales.size());
+  }
+#endif
+
   const size_t num_gemms = helper.OutputOffsets().size();
   MLAS_GEMM_QUANT_SHAPE_PARAMS gemm_shape;
   gemm_shape.M = static_cast<size_t>(helper.M());
@@ -108,6 +127,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   auto* gemm_output = static_cast<int32_t*>(gemm_output_buffer.get());
 
   std::vector<MLAS_GEMM_QUANT_DATA_PARAMS> gemm_params(num_gemms);
+  std::vector<MLAS_REQUANT_PARAM> requant_params(num_gemms);
   std::vector<MLAS_QGEMM_REQUANT_OUTPUT_PROCESSOR> requant_procs;
   requant_procs.reserve(num_gemms);
 
@@ -130,12 +150,26 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
 
     gemm_params[i].PerColumnZeroPoints = !IsScalarOr1ElementVector(b_offset);
 
+    requant_params[i].Size = output_scales.size();
+    requant_params[i].ZeroPoint = output_offset;
+#if defined(_M_ARM64) || defined(__aarch64__)
+    if (use_fixed_point_requant_) {
+      requant_params[i].RequantRoundKind = MLAS_ROUND_KIND::MlasRoundHalfUp;
+      requant_params[i].PreShift = pre_shifts.data() + helper.RightScaleOffsets()[i];
+      requant_params[i].Multiplier = multipliers.data() + helper.RightScaleOffsets()[i];
+      requant_params[i].PostShift = post_shifts.data() + helper.RightScaleOffsets()[i];
+    } else {
+      requant_params[i].RequantRoundKind = MLAS_ROUND_KIND::MlasRoundHalfEven;
+      requant_params[i].Scale = output_scales.data() + helper.RightScaleOffsets()[i];
+    }
+#else
+    requant_params[i].RequantRoundKind = MLAS_ROUND_KIND::MlasRoundHalfEven;
+    requant_params[i].Scale = output_scales.data() + helper.RightScaleOffsets()[i];
+#endif
     requant_procs.emplace_back(static_cast<uint8_t*>(y->MutableDataRaw()) + helper.OutputOffsets()[i],
                                static_cast<size_t>(helper.N()),
                                nullptr,
-                               output_scales.data() + helper.RightScaleOffsets()[i],
-                               output_scales.size() > 1,
-                               output_offset,
+                               &requant_params[i],
                                is_output_signed);
     gemm_params[i].OutputProcessor = &(requant_procs[i]);
   }

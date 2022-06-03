@@ -11,6 +11,7 @@
 #include "gsl/gsl"
 
 #include "core/common/common.h"
+#include "core/common/inlined_containers.h"
 #include "core/common/logging/logging.h"
 #include "core/common/profiler.h"
 #include "core/framework/allocation_planner.h"
@@ -204,17 +205,19 @@ class SessionState {
 
   /**
   Get cached memory pattern based on input shapes
+  Must be called only when all values contain tensors
   */
   const MemoryPatternGroup* GetMemoryPatternGroup(
-      const std::vector<std::reference_wrapper<const TensorShape>>& input_shapes,
+      const gsl::span<const OrtValue>& tensor_inputs,
       const std::vector<int>& feed_mlvalue_idxs,
       std::unordered_map<int, TensorShape>& inferred_shapes) const;
 
   /**
   Set generated memory pattern with a given input shapes.
   Const as it's an internal cache update only.
+  All inputs must represent Tensors
   */
-  Status UpdateMemoryPatternGroupCache(const std::vector<std::reference_wrapper<const TensorShape>>& input_shape,
+  Status UpdateMemoryPatternGroupCache(const gsl::span<const OrtValue>& tensor_inputs,
                                        std::unique_ptr<MemoryPatternGroup> mem_patterns) const;
 
   bool GetUseDeterministicCompute() const { return use_deterministic_compute_; }
@@ -273,9 +276,6 @@ class SessionState {
   concurrency::ThreadPool* GetThreadPool() const noexcept { return thread_pool_; }
   concurrency::ThreadPool* GetInterOpThreadPool() const noexcept { return inter_op_thread_pool_; }
 
-  bool ExportDll() const noexcept { return export_fused_dll_; }
-  void SetExportDllFlag(bool flag) noexcept { export_fused_dll_ = flag; }
-
   const FuncManager& GetFuncMgr() const noexcept { return fused_funcs_mgr_; }
   FuncManager& GetMutableFuncMgr() noexcept { return fused_funcs_mgr_; }
 
@@ -286,8 +286,8 @@ class SessionState {
   const NodeIndexInfo& GetNodeIndexInfo() const;
 
 #if !defined(ORT_MINIMAL_BUILD)
-  void UpdateToBeExecutedNodes(const std::vector<int>& fetch_mlvalue_idxs);
-  const std::unordered_set<NodeIndex>* GetToBeExecutedNodes(const std::vector<int>& fetch_mlvalue_idxs) const;
+  void UpdateToBeExecutedNodes(gsl::span<int const> fetch_mlvalue_idxs);
+  const InlinedHashSet<NodeIndex>* GetToBeExecutedNodes(gsl::span<int const> fetch_mlvalue_idxs) const;
   Status SaveToOrtFormat(flatbuffers::FlatBufferBuilder& builder,
                          flatbuffers::Offset<onnxruntime::fbs::SessionState>& fbs_session_state) const;
 #endif
@@ -300,7 +300,7 @@ class SessionState {
                            const KernelRegistryManager& kernel_registry_manager);
 
   Status FinalizeSessionState(const std::basic_string<PATH_CHAR_TYPE>& graph_loc,
-                              KernelRegistryManager& kernel_registry_manager,
+                              const KernelRegistryManager& kernel_registry_manager,
                               const SessionOptions& session_options = {},
                               const onnxruntime::fbs::SessionState* serialized_session_state = nullptr,
                               bool remove_initializers = true,
@@ -370,7 +370,7 @@ class SessionState {
 #endif
 
   Status FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_TYPE>& graph_loc,
-                                  KernelRegistryManager& kernel_registry_manager,
+                                  const KernelRegistryManager& kernel_registry_manager,
                                   _In_opt_ const Node* parent_node,
                                   const SessionOptions& session_options,
                                   bool remove_initializers,
@@ -380,7 +380,7 @@ class SessionState {
 
 #ifdef ENABLE_TRAINING
   Status GeneratePatternGroupCache(
-      const std::vector<std::reference_wrapper<const TensorShape>>& input_shape,
+      const gsl::span<const OrtValue>& inputs,
       const std::vector<int>& feed_mlvalue_idxs,
       MemoryPatternGroup* output,
       std::unordered_map<int, TensorShape>& inferred_shapes) const;
@@ -393,6 +393,9 @@ class SessionState {
 
   // KernelCreateInfo for each node so we do kernel lookup once
   KernelCreateInfoMap kernel_create_info_map_;
+
+  //fused_funcs_mgr_ must live longer than the session_kernels_, becaues a kernel could be created from this manager
+  FuncManager fused_funcs_mgr_;
 
   // If we compile kernels in a minimal build we need a way to find the kernel using the hash.
   // We populate this map when doing the kernel compilation in GraphPartitioner, and use it in LoadFromOrtFormat.
@@ -482,8 +485,6 @@ class SessionState {
   concurrency::ThreadPool* const thread_pool_{};
   concurrency::ThreadPool* const inter_op_thread_pool_{};
 
-  bool export_fused_dll_ = false;
-  FuncManager fused_funcs_mgr_;
   const DataTransferManager& data_transfer_mgr_;
 
   bool use_deterministic_compute_;
@@ -498,7 +499,11 @@ class SessionState {
   PrepackedWeightsContainer* const prepacked_weights_container_{};
 
 #if !defined(ORT_MINIMAL_BUILD)
-  std::map<std::vector<int>, std::unordered_set<NodeIndex>> to_be_executed_nodes_;
+#ifndef DISABLE_ABSEIL
+  InlinedHashMap<InlinedVector<int>, InlinedHashSet<NodeIndex>> to_be_executed_nodes_;
+#else
+  std::map<InlinedVector<int>, InlinedHashSet<NodeIndex>> to_be_executed_nodes_;
+#endif
 #endif
 
   SessionState* parent_ = nullptr;

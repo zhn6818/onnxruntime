@@ -33,8 +33,8 @@ namespace perftest {
       "\t-A: Disable memory arena\n"
       "\t-I: Generate tensor input binding (Free dimensions are treated as 1.)\n"
       "\t-c [parallel runs]: Specifies the (max) number of runs to invoke simultaneously. Default:1.\n"
-      "\t-e [cpu|cuda|dnnl|tensorrt|openvino|nuphar|dml|acl]: Specifies the provider 'cpu','cuda','dnnl','tensorrt', "
-      "'openvino', 'nuphar', 'dml', 'acl', 'nnapi' or 'coreml'. "
+      "\t-e [cpu|cuda|dnnl|tensorrt|openvino|nuphar|dml|acl|rocm|migraphx]: Specifies the provider 'cpu','cuda','dnnl','tensorrt', "
+      "'openvino', 'nuphar', 'dml', 'acl', 'nnapi', 'coreml', 'rocm' or 'migraphx'. "
       "Default:'cpu'.\n"
       "\t-b [tf|ort]: backend to use. Default:ort\n"
       "\t-r [repeated_times]: Specifies the repeated times if running in 'times' test mode.Default:1000.\n"
@@ -56,17 +56,19 @@ namespace perftest {
       "\t-q: [CUDA only] use separate stream for copy. \n"
       "\t-z: Set denormal as zero. When turning on this option reduces latency dramatically, a model may have denormals.\n"
       "\t-i: Specify EP specific runtime options as key value pairs. Different runtime options available are: \n"
+      "\t-R: Use fixed point based requantization on ARM64."
       "\t    [OpenVINO only] [device_type]: Overrides the accelerator hardware type and precision with these values at runtime.\n"
       "\t    [OpenVINO only] [device_id]: Selects a particular hardware device for inference.\n"
       "\t    [OpenVINO only] [enable_vpu_fast_compile]: Optionally enabled to speeds up the model's compilation on VPU device targets.\n"
       "\t    [OpenVINO only] [num_of_threads]: Overrides the accelerator hardware type and precision with these values at runtime.\n"
       "\t    [OpenVINO only] [use_compiled_network]: Can be enabled to directly import pre-compiled blobs(VPU) or cl_cache files(iGPU) if exists else dump one. This feature is supported on MyriadX(VPU) hardware device target. Starting from OpenVINO 2021.4 version, this feature also works with iGPU with cl_cache.\n"
       "\t    [OpenVINO only] [blob_dump_path]: Explicitly specify the path where you would like to dump and load the blobs or cl_cache files for the use_compiled_network(Model caching) feature. This overrides the default path.\n"
+      "\t    [OpenVINO only] [enable_opencl_throttling]: Enables OpenCL queue throttling for GPU device(Reduces the CPU Utilization while using GPU) \n"
       "\t [Usage]: -e <provider_name> -i '<key1>|<value1> <key2>|<value2>'\n\n"
-      "\t [Example] [For OpenVINO EP] -e openvino -i \"device_type|CPU_FP32 enable_vpu_fast_compile|true num_of_threads|5 use_compiled_network|true blob_dump_path|\"<path>\"\"\n"
+      "\t [Example] [For OpenVINO EP] -e openvino -i \"device_type|CPU_FP32 enable_vpu_fast_compile|true num_of_threads|5 enable_opencl_throttling|true use_compiled_network|true blob_dump_path|\"<path>\"\"\n"
       "\t    [TensorRT only] [trt_max_partition_iterations]: Maximum iterations for TensorRT parser to get capability.\n"
-      "\t    [TensorRT only] [trt_min_subgraph_size]: Minimum size of TensorRT subgraphs.\n"	  
-      "\t    [TensorRT only] [trt_max_workspace_size]: Set TensorRT maximum workspace size in byte.\n"	  
+      "\t    [TensorRT only] [trt_min_subgraph_size]: Minimum size of TensorRT subgraphs.\n"
+      "\t    [TensorRT only] [trt_max_workspace_size]: Set TensorRT maximum workspace size in byte.\n"
       "\t    [TensorRT only] [trt_fp16_enable]: Enable TensorRT FP16 precision.\n"
       "\t    [TensorRT only] [trt_int8_enable]: Enable TensorRT INT8 precision.\n"
       "\t    [TensorRT only] [trt_int8_calibration_table_name]: Specify INT8 calibration table name.\n"
@@ -79,6 +81,12 @@ namespace perftest {
       "\t    [TensorRT only] [trt_force_sequential_engine_build]: Force TensorRT engines to be built sequentially.\n"
       "\t [Usage]: -e <provider_name> -i '<key1>|<value1> <key2>|<value2>'\n\n"
       "\t [Example] [For TensorRT EP] -e tensorrt -i 'trt_fp16_enable|true trt_int8_enable|true trt_int8_calibration_table_name|calibration.flatbuffers trt_int8_use_native_calibration_table|false trt_force_sequential_engine_build|false'\n"
+      "\t    [NNAPI only] [NNAPI_FLAG_USE_FP16]: Use fp16 relaxation in NNAPI EP..\n"
+      "\t    [NNAPI only] [NNAPI_FLAG_USE_NCHW]: Use the NCHW layout in NNAPI EP.\n"
+      "\t    [NNAPI only] [NNAPI_FLAG_CPU_DISABLED]: Prevent NNAPI from using CPU devices.\n"
+      "\t    [NNAPI only] [NNAPI_FLAG_CPU_ONLY]: Using CPU only in NNAPI EP.\n"
+      "\t [Usage]: -e <provider_name> -i '<key1> <key2>'\n\n"
+      "\t [Example] [For NNAPI EP] -e nnapi -i \" NNAPI_FLAG_USE_FP16 NNAPI_FLAG_USE_NCHW NNAPI_FLAG_CPU_DISABLED \"\n"
       "\t-h: help\n");
 }
 #ifdef _WIN32
@@ -107,7 +115,7 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
 
 /*static*/ bool CommandLineParser::ParseArguments(PerformanceTestConfig& test_config, int argc, ORTCHAR_T* argv[]) {
   int ch;
-  while ((ch = getopt(argc, argv, ORT_TSTR("b:m:e:r:t:p:x:y:c:d:o:u:i:f:F:AMPIvhsqz"))) != -1) {
+  while ((ch = getopt(argc, argv, ORT_TSTR("b:m:e:r:t:p:x:y:c:d:o:u:i:f:F:AMPIvhsqzR"))) != -1) {
     switch (ch) {
       case 'f': {
         std::basic_string<ORTCHAR_T> dim_name;
@@ -172,6 +180,10 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
           test_config.machine_config.provider_type_name = onnxruntime::kAclExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("armnn"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kArmNNExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("rocm"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kRocmExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("migraphx"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kMIGraphXExecutionProvider;
         } else {
           return false;
         }
@@ -260,6 +272,9 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
         break;
       case 'i':
         test_config.run_config.ep_runtime_config_string = optarg;
+        break;
+      case 'R':
+        test_config.run_config.use_fixed_point_requant = true;
         break;
       case '?':
       case 'h':

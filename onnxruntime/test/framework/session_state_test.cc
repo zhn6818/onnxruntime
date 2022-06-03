@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "test/test_environment.h"
 #include "test/util/include/default_providers.h"
+#include "core/optimizer/transpose_optimizer/optimizer_utils.h"
 
 using namespace ONNX_NAMESPACE;
 using namespace std;
@@ -54,7 +55,7 @@ TEST_P(SessionStateAddGetKernelTest, AddGetKernelTest) {
   auto& graph = model.MainGraph();
 
   ExecutionProviders execution_providers;
-  auto tmp_cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false));
+  auto tmp_cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false, false));
   auto* cpu_execution_provider = tmp_cpu_execution_provider.get();
   ASSERT_STATUS_OK(execution_providers.Add(kCpuExecutionProvider, std::move(tmp_cpu_execution_provider)));
 
@@ -127,7 +128,7 @@ TEST_P(SessionStateTestP, TestInitializerProcessing) {
   InitializedTensorSet initializers = graph.GetAllInitializedTensors();
 
   ExecutionProviders execution_providers;
-  CPUExecutionProviderInfo epi{false};
+  CPUExecutionProviderInfo epi{false, false};
   status =
       execution_providers.Add(onnxruntime::kCpuExecutionProvider, std::make_unique<CPUExecutionProvider>(epi));
   ASSERT_TRUE(status.IsOK()) << status;
@@ -142,7 +143,8 @@ TEST_P(SessionStateTestP, TestInitializerProcessing) {
                              DefaultLoggingManager().DefaultLogger(), profiler);
 
   GraphPartitioner partitioner(krm, execution_providers);
-  status = partitioner.Partition(graph, session_state.ExportDll(), session_state.GetMutableFuncMgr());
+  status = partitioner.Partition(graph, session_state.GetMutableFuncMgr(), 
+                                layout_transformer::TransformLayoutForCompilingEP);
   ASSERT_TRUE(status.IsOK()) << status;
 
   ASSERT_STATUS_OK(session_state.FinalizeSessionState(oss.str(), krm));
@@ -191,7 +193,7 @@ TEST(SessionStateTest, TestInitializerMemoryAllocatedUsingNonArenaMemory) {
     Graph& graph = model->MainGraph();
 
     ExecutionProviders execution_providers;
-    CPUExecutionProviderInfo epi{true};  // use an arena-based allocator for this EP
+    CPUExecutionProviderInfo epi{true, false};  // use an arena-based allocator for this EP
     status = execution_providers.Add(onnxruntime::kCpuExecutionProvider, std::make_unique<CPUExecutionProvider>(epi));
     ASSERT_TRUE(status.IsOK()) << status;
 
@@ -207,7 +209,8 @@ TEST(SessionStateTest, TestInitializerMemoryAllocatedUsingNonArenaMemory) {
 
     // Partition the graph
     GraphPartitioner partitioner(krm, execution_providers);
-    status = partitioner.Partition(graph, session_state.ExportDll(), session_state.GetMutableFuncMgr());
+    status = partitioner.Partition(graph, session_state.GetMutableFuncMgr(),
+                                   layout_transformer::TransformLayoutForCompilingEP);
     ASSERT_TRUE(status.IsOK()) << status;
 
     // Finalize the session state
@@ -240,7 +243,7 @@ TEST(SessionStateTest, TestInitializerMemoryAllocatedUsingNonArenaMemory) {
     Graph& graph = model->MainGraph();
 
     ExecutionProviders execution_providers;
-    CPUExecutionProviderInfo epi{true};  // use an arena-based allocator for this EP
+    CPUExecutionProviderInfo epi{true, false};  // use an arena-based allocator for this EP
     status = execution_providers.Add(onnxruntime::kCpuExecutionProvider, std::make_unique<CPUExecutionProvider>(epi));
     ASSERT_TRUE(status.IsOK()) << status;
 
@@ -256,7 +259,8 @@ TEST(SessionStateTest, TestInitializerMemoryAllocatedUsingNonArenaMemory) {
 
     // Partition the graph
     GraphPartitioner partitioner(krm, execution_providers);
-    status = partitioner.Partition(graph, session_state.ExportDll(), session_state.GetMutableFuncMgr());
+    status = partitioner.Partition(graph, session_state.GetMutableFuncMgr(),
+                                   layout_transformer::TransformLayoutForCompilingEP);
     ASSERT_TRUE(status.IsOK()) << status;
 
     // Finalize the session state
@@ -476,7 +480,7 @@ TEST_P(SessionStatePrepackingTest, PrePackingTest) {
       .Output(0, "output_0", "docstr for output_0.", "tensor(float)");
 
   ExecutionProviders execution_providers;
-  auto cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false));
+  auto cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false, false));
   ASSERT_STATUS_OK(execution_providers.Add(kCpuExecutionProvider, std::move(cpu_execution_provider)));
 
   DataTransferManager dtm;
@@ -537,7 +541,7 @@ TEST(SessionStateTest, SharedInitalizersWithPrePackingTest) {
       .Output(0, "output_0", "docstr for output_0.", "tensor(float)");
 
   ExecutionProviders execution_providers;
-  auto cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false));
+  auto cpu_execution_provider = std::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false, false));
   ASSERT_STATUS_OK(execution_providers.Add(kCpuExecutionProvider, std::move(cpu_execution_provider)));
 
   DataTransferManager dtm;

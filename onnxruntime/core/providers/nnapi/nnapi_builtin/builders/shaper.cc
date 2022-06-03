@@ -3,20 +3,17 @@
 
 #include "core/providers/common.h"
 
-#include "helper.h"
 #include "shaper.h"
+#include "helper.h"
 
 namespace onnxruntime {
 namespace nnapi {
 
-using std::string;
-using std::vector;
-
 std::pair<uint32_t, uint32_t> ComputeConvOutputShape(const uint32_t input_size_y, const uint32_t input_size_x,
                                                      const uint32_t weight_size_y, const uint32_t weight_size_x,
-                                                     const vector<int32_t>& onnx_pads,
-                                                     const vector<int32_t>& onnx_strides,
-                                                     const vector<int32_t>& onnx_dilations) {
+                                                     const std::vector<int32_t>& onnx_pads,
+                                                     const std::vector<int32_t>& onnx_strides,
+                                                     const std::vector<int32_t>& onnx_dilations) {
   int32_t padding_top = onnx_pads[0];
   int32_t padding_bottom = onnx_pads[2];
   int32_t padding_left = onnx_pads[1];
@@ -53,9 +50,9 @@ std::pair<uint32_t, uint32_t> ComputeConvOutputShape(const uint32_t input_size_y
 
 Status Shaper::Conv(const std::string& input_name,
                     const std::string& weight_name,
-                    const vector<int32_t>& onnx_pads,
-                    const vector<int32_t>& onnx_strides,
-                    const vector<int32_t>& onnx_dilations,
+                    const std::vector<int32_t>& onnx_pads,
+                    const std::vector<int32_t>& onnx_strides,
+                    const std::vector<int32_t>& onnx_dilations,
                     bool nchw,
                     const std::string& output_name) {
   SHAPER_FUNC(Conv,
@@ -132,6 +129,13 @@ Status Shaper::Squeeze(const std::string& input_name,
   SHAPER_FUNC(Squeeze, input_name, axes, output_name);
 }
 
+Status Shaper::DepthToSpace(const std::string& input_name,
+                            const int32_t blocksize,
+                            bool nchw,
+                            const std::string& output_name) {
+  SHAPER_FUNC(DepthToSpace, input_name, blocksize, nchw, output_name);
+}
+
 Status Shaper::ResizeUsingScales(const std::string& input_name,
                                  const float scale_h, const float scale_w,
                                  bool nchw,
@@ -150,9 +154,9 @@ Status Shaper::ResizeUsingOutputSizes(const std::string& input_name,
 
 Status Shaper::ConvImpl(const std::string& input_name,
                         const std::string& weight_name,
-                        const vector<int32_t>& onnx_pads,
-                        const vector<int32_t>& onnx_strides,
-                        const vector<int32_t>& onnx_dilations,
+                        const std::vector<int32_t>& onnx_pads,
+                        const std::vector<int32_t>& onnx_strides,
+                        const std::vector<int32_t>& onnx_dilations,
                         bool nchw,
                         const std::string& output_name) {
   const Shape& input_dimen = shape_map_.at(input_name);
@@ -252,7 +256,7 @@ Status Shaper::ReshapeImpl(const std::string& input_name,
     ORT_RETURN_IF_NOT(dim_i != 0, "NNAPI does not support 0 reshape dimension");
     if (dim_i == -1) {
       ORT_RETURN_IF_NOT(unk_dim_idx == -1, "Only one input dimension of Attr(shape) can be unknown!");
-      unk_dim_idx = i;
+      unk_dim_idx = static_cast<int>(i);
     } else {
       capacity *= dim_i;
       output_dimen[i] = static_cast<uint32_t>(dim_i);
@@ -263,7 +267,7 @@ Status Shaper::ReshapeImpl(const std::string& input_name,
     if (input_size == 0)
       output_dimen[unk_dim_idx] = 0;
     else
-      output_dimen[unk_dim_idx] = input_size / capacity;
+      output_dimen[unk_dim_idx] = static_cast<uint32_t>(input_size / capacity);
 
     capacity *= output_dimen[unk_dim_idx];
   }
@@ -375,7 +379,7 @@ Status Shaper::SqueezeImpl(const std::string& input_name,
                            const std::vector<int32_t>& axes,
                            const std::string& output_name) {
   const Shape& input_dimen = shape_map_.at(input_name);
-  int32_t input_size = input_dimen.size();
+  int32_t input_size = static_cast<int32_t>(input_dimen.size());
   std::unordered_set<int32_t> axes_to_be_squeezed;
 
   // If the Op is squeezing all by not specifying axes, the axes is pre-populate
@@ -400,17 +404,41 @@ Status Shaper::SqueezeImpl(const std::string& input_name,
   return Status::OK();
 }
 
+Status Shaper::DepthToSpaceImpl(const std::string& input_name,
+                                const int32_t blocksize,
+                                bool nchw,
+                                const std::string& output_name) {
+  const Shape& input_dimen = shape_map_.at(input_name);
+
+  // Make output dimensions
+  Shape output_dimen = shape_map_.at(input_name);
+  if (nchw) {
+    output_dimen[0] = input_dimen[0];
+    output_dimen[1] = input_dimen[1] / (blocksize * blocksize);
+    output_dimen[2] = input_dimen[2] * blocksize;
+    output_dimen[3] = input_dimen[3] * blocksize;
+  } else {  // nhwc
+    output_dimen[0] = input_dimen[0];
+    output_dimen[1] = input_dimen[1] * blocksize;
+    output_dimen[2] = input_dimen[2] * blocksize;
+    output_dimen[3] = input_dimen[3] / (blocksize * blocksize);
+  }
+
+  shape_map_[output_name] = output_dimen;
+  return Status::OK();
+}
+
 Status Shaper::ResizeUsingScalesImpl(const std::string& input_name,
                                      const float scale_h, const float scale_w,
                                      bool nchw,
                                      const std::string& output_name) {
   Shape output_dimen = shape_map_.at(input_name);
   if (nchw) {
-    output_dimen[2] *= scale_h;
-    output_dimen[3] *= scale_w;
+    output_dimen[2] = static_cast<uint32_t>(output_dimen[2] * scale_h);
+    output_dimen[3] = static_cast<uint32_t>(output_dimen[3] * scale_w);
   } else {  // nhwc
-    output_dimen[1] *= scale_h;
-    output_dimen[2] *= scale_w;
+    output_dimen[1] = static_cast<uint32_t>(output_dimen[1] * scale_h);
+    output_dimen[2] = static_cast<uint32_t>(output_dimen[2] * scale_w);
   }
   shape_map_[output_name] = output_dimen;
   return Status::OK();

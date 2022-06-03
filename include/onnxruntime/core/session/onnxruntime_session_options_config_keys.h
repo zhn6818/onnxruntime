@@ -47,6 +47,16 @@ static const char* const kOrtSessionOptionsConfigSetDenormalAsZero = "session.se
 // Its default value is "0"
 static const char* const kOrtSessionOptionsDisableQuantQDQ = "session.disable_quant_qdq";
 
+// If set to "1", enables the removal of QuantizeLinear/DequantizeLinear node pairs once all QDQ handling has been
+// completed. e.g. If after all QDQ handling has completed and we have -> FloatOp -> Q -> DQ -> FloatOp -> the
+// Q -> DQ could potentially be removed. This will provide a performance benefit by avoiding going from float to
+// 8-bit and back to float, but could impact accuracy. The impact on accuracy will be model specific and depend on
+// other factors like whether the model was created using Quantization Aware Training or Post Training Quantization.
+// As such, it's best to test to determine if enabling this works well for your scenario.
+// The default value is "0"
+// Available since version 1.11.
+static const char* const kOrtSessionOptionsEnableQuantQDQCleanup = "session.enable_quant_qdq_cleanup";
+
 // Enable or disable gelu approximation in graph optimization. "0": disable; "1": enable. The default is "0".
 // GeluApproximation has side effects which may change the inference results. It is disabled by default due to this.
 static const char* const kOrtSessionOptionsEnableGeluApproximation = "optimization.enable_gelu_approximation";
@@ -69,23 +79,20 @@ static const char* const kOrtSessionOptionsConfigAllowIntraOpSpinning = "session
 // has to guarantee that the model bytes are valid until the ORT session using the model bytes is destroyed.
 static const char* const kOrtSessionOptionsConfigUseORTModelBytesDirectly = "session.use_ort_model_bytes_directly";
 
-// Save information for replaying graph optimizations later instead of applying them directly.
-//
-// When an ONNX model is loaded, ORT can perform various optimizations on the graph.
-// However, when an ORT format model is loaded, these optimizations are typically not available - this scenario must
-// be supported by minimal builds.
-// When loading an ONNX model, ORT can optionally save the effects of some optimizations for later replay in an ORT
-// format model. These are known as "runtime optimizations" - in an ORT format model, they happen at runtime.
-//
-// Note: This option is only applicable when loading an ONNX model and saving an ORT format model.
-//
-// Note: Runtime optimizations are only supported for certain optimizations at the extended level or higher.
-// Unsupported optimizations at those levels are not applied at all, while optimizations at other levels are applied
-// directly.
-//
-// "0": disabled, "1": enabled
-// The default is "0".
-static const char* const kOrtSessionOptionsConfigSaveRuntimeOptimizations = "optimization.save_runtime_optimizations";
+// This should only be specified when exporting an ORT format model for use on a different platform.
+// If the ORT format model will be used on ARM platforms set to "1". For other platforms set to "0"
+// Available since version 1.11.
+static const char* const kOrtSessionOptionsQDQIsInt8Allowed = "session.qdqisint8allowed";
+
+// Specifies how minimal build graph optimizations are handled in a full build.
+// These optimizations are at the extended level or higher.
+// Possible values and their effects are:
+// "save": Save runtime optimizations when saving an ORT format model.
+// "apply": Only apply optimizations available in a minimal build.
+// ""/<unspecified>: Apply optimizations available in a full build.
+// Available since version 1.11.
+static const char* const kOrtSessionOptionsConfigMinimalBuildOptimizations =
+    "optimization.minimal_build_optimizations";
 
 // Note: The options specific to an EP should be specified prior to appending that EP to the session options object in
 // order for them to take effect.
@@ -96,3 +103,41 @@ static const char* const kOrtSessionOptionsConfigSaveRuntimeOptimizations = "opt
 // If not specified, the default set of stop ops is used. To specify an empty stop ops types list and disable stop op
 // exclusion, set the value to "".
 static const char* const kOrtSessionOptionsConfigNnapiEpPartitioningStopOps = "ep.nnapi.partitioning_stop_ops";
+
+// Enabling dynamic block-sizing for multithreading.
+// With a positive value, thread pool will split a task of N iterations to blocks of size starting from:
+// N / (num_of_threads * dynamic_block_base)
+// As execution progresses, the size will decrease according to the diminishing residual of N,
+// meaning the task will be distributed in smaller granularity for better parallelism.
+// For some models, it helps to reduce the variance of E2E inference latency and boost performance.
+// The feature will not function by default, specify any positive integer, e.g. "4", to enable it.
+// Available since version 1.11.
+static const char* const kOrtSessionOptionsConfigDynamicBlockBase = "session.dynamic_block_base";
+
+// "1": all inconsistencies encountered during shape and type inference
+// will result in failures.
+// "0": in some cases warnings will be logged but processing will continue. The default.
+// May be useful to expose bugs in models.
+static const char* const kOrtSessionOptionsConfigStrictShapeTypeInference = "session.strict_shape_type_inference";
+
+// SessionOption 'fixed_point_requant_on_arm64' controls the requantization method on ARM devices.
+// Requantization is computed with formula:
+//     v = round(clamp(S * (I - Z), min, max))
+// where v is the target value with type TOutput, which is either int8_t or uint8_t
+//       I is the input value with type int32_t
+//       S is the scale with type float
+//       Z is the zero point with type same as TOutput.
+//       min is the minimum value of type TOutput.
+//       max is the maximum value of type TOutput.
+// For considerations of power consumption and some ARM devices don't even have FPUs, it is import to to be able to run
+// quantization with integer instructions only.FixedPoint Requantization is introduced to support this feature.
+// Its general idea is to convert scale S to fixed point. Ruy and XNNPack's method are referred for the implementation.
+// https://github.com/google/ruy/blob/a09683b8da7164b9c5704f88aef2dc65aa583e5d/ruy/apply_multiplier.cc#L48
+// https://github.com/google/XNNPACK/blob/1e37b200d3f4ba19151eb30c1c329873d541326c/src/params-init.c#L211
+// "0": disable. ORT uses float point based requantization on ARM devices.
+// "1": enable. ORT uses fixed point based requantization on ARM devices.
+// Its default value is "0"
+// **NOTE** that fixed point requantization rounds half to up, whereas ONNX spec rounds half to even, so for identical
+// model and input the inference results may not be exactly same with this option on and off. The impact should be
+// small in practice (NNApi EP uses same rounding).
+static const char* const kOrtSessionOptionsConfigFixedPointRequantOnARM64 = "session.fixed_point_requant_on_arm64";

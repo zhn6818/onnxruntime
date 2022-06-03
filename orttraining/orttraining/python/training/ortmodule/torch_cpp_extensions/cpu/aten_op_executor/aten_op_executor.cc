@@ -68,9 +68,11 @@ struct ATenOperator {
 
     bool is_list = is_list_arguments[index];
     c10::IValue i_value;
+    // Create the torch tensor from this DLPack no matter we need it or not below,
+    // so that the dlpack's deleter will be triggered when torch tensor is out of scope.
+    at::Tensor tensor = at::fromDLPack(dlpack);
     switch (elem_kinds[index]) {
       case c10::TypeKind::TensorType: {
-        at::Tensor tensor = at::fromDLPack(dlpack);
         i_value = is_optional ? c10::IValue(c10::optional<at::Tensor>(tensor)) : c10::IValue(tensor);
       } break;
       case c10::TypeKind::IntType: {
@@ -117,9 +119,16 @@ class ATenOperatorCache {
   }
 
   const ATenOperator& GetOperator(const std::string& op_name, const std::string& overload_name) {
-    auto key = std::make_pair(op_name, overload_name);
+    // PyTorch ONNX converter creates ATen operators with name without domain
+    std::string final_op_name = op_name;
+    auto pos = op_name.find("::");
+    if (pos == std::string::npos) {
+      final_op_name = std::string("aten::" + op_name);
+    }
+
+    auto key = std::make_pair(final_op_name, overload_name);
     if (ops_.find(key) == ops_.end()) {
-      c10::OperatorName full_name(op_name, overload_name);
+      c10::OperatorName full_name(final_op_name, overload_name);
       auto op = torch::jit::findOperatorFor(full_name);
       TORCH_INTERNAL_ASSERT(op);
       ATenOperator aten_op;

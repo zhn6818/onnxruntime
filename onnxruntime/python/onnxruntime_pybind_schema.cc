@@ -22,7 +22,7 @@ void addGlobalSchemaFunctions(pybind11::module& m) {
         std::vector<onnxruntime::KernelDef> result;
 
         std::vector<std::shared_ptr<onnxruntime::IExecutionProviderFactory>> factories = {
-            onnxruntime::CreateExecutionProviderFactory_CPU(0),
+            onnxruntime::CreateExecutionProviderFactory_CPU(onnxruntime::CPUExecutionProviderInfo(false, false)),
 #ifdef USE_CUDA
             []() {
               OrtCUDAProviderOptions provider_options{};
@@ -54,7 +54,11 @@ void addGlobalSchemaFunctions(pybind11::module& m) {
                 }()),
 #endif
 #ifdef USE_MIGRAPHX
-            onnxruntime::CreateExecutionProviderFactory_MIGraphX(0),
+             onnxruntime::CreateExecutionProviderFactory_MIGraphX(
+                [&]() {
+                  MIGraphXExecutionProviderInfo info{};
+                  return info;
+                }()),
 #endif
 #ifdef USE_VITISAI
             onnxruntime::CreateExecutionProviderFactory_VITISAI("DPUCADX8G", 0, "", ""),

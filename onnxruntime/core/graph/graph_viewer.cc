@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#ifdef _WIN32
-// disable some warnings from protobuf to pass Windows build
-#pragma warning(disable : 4244)
-#endif
-
 #include "core/graph/graph_viewer.h"
 #include "core/graph/indexed_sub_graph.h"
 
@@ -276,9 +271,19 @@ bool GraphViewer::IsConstantInitializer(const std::string& name, bool check_oute
   return GetConstantInitializer(name, check_outer_scope) != nullptr;
 }
 
+bool GraphViewer::IsInitializedTensor(const std::string& name) const {
+  return graph_->IsInitializedTensor(name);
+}
+
 const ONNX_NAMESPACE::TensorProto* GraphViewer::GetConstantInitializer(const std::string& initializer_name,
                                                                        bool check_outer_scope) const {
   return graph_->GetConstantInitializer(initializer_name, check_outer_scope);
 }
+
+#if !defined(ORT_MINIMAL_BUILD)
+const std::unordered_set<std::string>& GraphViewer::GetOuterScopeNodeArgNames() const noexcept {
+  return graph_->GetOuterScopeNodeArgNames();
+}
+#endif
 
 }  // namespace onnxruntime
