@@ -1773,7 +1773,7 @@ else()
   else()
     FetchContent_Declare(
       flatbuffers
-      URL https://github.com/google/flatbuffers/archive/refs/tags/v2.0.6.zip      
+      URL https://github.com/google/flatbuffers/archive/refs/tags/v1.12.0.zip      
     )
     FetchContent_MakeAvailable(flatbuffers)
   endif()
