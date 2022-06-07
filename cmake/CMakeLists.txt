@@ -199,9 +199,7 @@ endif()
 # Single output director for all binaries
 set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin CACHE PATH "Single output directory for all binaries.")
 
-
-find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/cmake/external/onnx/CMakeLists.txt")
+if(EXISTS "${PROJECT_SOURCE_DIR}/cmake/external/onnx/CMakeLists.txt")
   set(onnxruntime_USE_SUBMODULE TRUE)
 else()
   include(FetchContent)
@@ -687,8 +685,7 @@ if (onnxruntime_BUILD_UNIT_TESTS)
   else()
     FetchContent_Declare(
       googletest
-      GIT_REPOSITORY https://github.com/google/googletest.git
-      GIT_TAG        53495a2a7d6ba7e0691a7f3602e9a5324bba6e45
+      URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip      
     )
     FetchContent_MakeAvailable(googletest)
   endif()
@@ -807,8 +804,7 @@ else()
   else()
     FetchContent_Declare(
       protobuf
-      GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-      GIT_TAG        2dc747c574b68a808ea4699d26942c8132fe2b09
+      URL https://github.com/protocolbuffers/protobuf/archive/refs/tags/v3.18.1.zip      
       SOURCE_SUBDIR  cmake
     )
     FetchContent_MakeAvailable(protobuf)
@@ -889,8 +885,7 @@ else()
   else()
     FetchContent_Declare(
 		  date
-		  GIT_REPOSITORY https://github.com/HowardHinnant/date.git
-		  GIT_TAG        e7e1482087f58913b80a20b04d5c58d9d6d90155
+		  URL https://github.com/HowardHinnant/date/archive/refs/tags/v2.4.1.zip		  
 		)
 		FetchContent_MakeAvailable(date)
   endif()
@@ -912,8 +907,7 @@ else()
   else()
     FetchContent_Declare(
       mp11
-      GIT_REPOSITORY https://github.com/boostorg/mp11.git
-      GIT_TAG        21cace4e574180ba64d9307a5e4ea9e5e94d3e8d
+      URL https://github.com/boostorg/mp11/archive/refs/tags/boost-1.79.0.zip      
     )
     FetchContent_MakeAvailable(mp11)
   endif()
@@ -935,8 +929,7 @@ else()
   else()
     FetchContent_Declare(
       json
-      GIT_REPOSITORY https://github.com/nlohmann/json.git
-      GIT_TAG        db78ac1d7716f56fc9f1b030b715f872f93964e4
+      URL https://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip      
     )
     FetchContent_MakeAvailable(json)
   endif()
@@ -956,8 +949,7 @@ else()
   else()
     FetchContent_Declare(
       re2
-      GIT_REPOSITORY https://github.com/google/re2.git
-      GIT_TAG        4244cd1cb492fa1d10986ec67f862964c073f844
+      URL https://github.com/google/re2/archive/refs/tags/2022-06-01.zip     
     )
     FetchContent_MakeAvailable(re2)
   endif() 
@@ -1037,8 +1029,7 @@ if (CPUINFO_SUPPORTED)
     else()
         FetchContent_Declare(
           pytorch_cpuinfo
-          GIT_REPOSITORY https://github.com/pytorch/cpuinfo.git
-          GIT_TAG        5916273f79a21551890fd3d56fc5375a78d1598d
+          URL https://github.com/pytorch/cpuinfo/archive/5916273f79a21551890fd3d56fc5375a78d1598d.zip
         )
         FetchContent_MakeAvailable(pytorch_cpuinfo)
     endif()
@@ -1068,8 +1059,7 @@ if(onnxruntime_USE_SUBMODULE)
 else()
     FetchContent_Declare(
       safeint
-      GIT_REPOSITORY https://github.com/dcleblanc/SafeInt.git
-      GIT_TAG        ff15c6ada150a5018c5ef2172401cb4529eac9c0
+      URL https://github.com/dcleblanc/SafeInt/archive/ff15c6ada150a5018c5ef2172401cb4529eac9c0.zip      
     )
     FetchContent_MakeAvailable(safeint)
     add_library(safeint_interface INTERFACE)
@@ -1724,8 +1714,7 @@ if(onnxruntime_USE_SUBMODULE)
 else()
     FetchContent_Declare(
       onnx
-      GIT_REPOSITORY https://github.com/onnx/onnx.git
-      GIT_TAG        850a81b0b77786bf99ea90580242b084f86a6235
+      URL https://github.com/onnx/onnx/archive/850a81b0b77786bf99ea90580242b084f86a6235.zip      
     )
     FetchContent_MakeAvailable(onnx)
 endif()
@@ -1776,8 +1765,7 @@ else()
   else()
     FetchContent_Declare(
       flatbuffers
-      GIT_REPOSITORY https://github.com/google/flatbuffers.git
-      GIT_TAG        6df40a2471737b27271bdd9b900ab5f3aec746c7
+      URL https://github.com/google/flatbuffers/archive/refs/tags/v2.0.6.zip      
     )
     FetchContent_MakeAvailable(flatbuffers)
   endif()
