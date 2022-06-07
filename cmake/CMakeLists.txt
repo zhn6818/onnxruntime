@@ -738,7 +738,15 @@ if (onnxruntime_BUILD_BENCHMARKS)
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark testing as we don't need it.")
     # We will not need to install benchmark since we link it statically.
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "Disable benchmark install to avoid overwriting vendor install.")
-    add_subdirectory(${PROJECT_SOURCE_DIR}/external/googlebenchmark EXCLUDE_FROM_ALL)
+    if(onnxruntime_USE_SUBMODULE)
+      add_subdirectory(${PROJECT_SOURCE_DIR}/external/googlebenchmark EXCLUDE_FROM_ALL)
+    else()
+      FetchContent_Declare(
+        google_benchmark
+        URL https://github.com/google/benchmark/archive/refs/tags/v1.6.1.zip
+      )
+      FetchContent_MakeAvailable(google_benchmark)
+    endif()
     #add_library(benchmark::benchmark ALIAS benchmark)
   endif()
 endif()
