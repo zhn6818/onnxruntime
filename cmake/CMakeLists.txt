@@ -766,7 +766,7 @@ if (NOT WIN32)
 	  set(nsync_SOURCE_DIR ${google_nsync_SOURCE_DIR})
     endif()
   endif()
-endif
+endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/external)
 
 #protobuf begin
@@ -877,7 +877,6 @@ get_filename_component(ORTTRAINING_ROOT "${ORTTRAINING_ROOT}" ABSOLUTE)
 get_filename_component(REPO_ROOT "${REPO_ROOT}" ABSOLUTE)
 set(ONNXRUNTIME_INCLUDE_DIR ${REPO_ROOT}/include/onnxruntime)
 
-<<<<<<< HEAD
 if (onnxruntime_PREFER_SYSTEM_LIB)
   find_package(date)
 endif()
@@ -886,7 +885,6 @@ if (date_FOUND)
   add_library(date_interface ALIAS date::date)
 else()
   message("Use date from submodule")
-  add_subdirectory(external/date EXCLUDE_FROM_ALL)
   if(onnxruntime_USE_SUBMODULE)
     add_subdirectory(external/date EXCLUDE_FROM_ALL)
   else()
@@ -920,7 +918,6 @@ else()
     )
     FetchContent_MakeAvailable(mp11)
   endif()
-  add_subdirectory(external/mp11 EXCLUDE_FROM_ALL)
 endif()
 
 if (onnxruntime_PREFER_SYSTEM_LIB)
@@ -1047,7 +1044,6 @@ if (CPUINFO_SUPPORTED)
         FetchContent_MakeAvailable(pytorch_cpuinfo)
     endif()
   endif()
-  endif()
 endif()
 
 # bounds checking behavior.
@@ -1067,7 +1063,19 @@ set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -DGSL_UNENFORCED_O
 
 include(eigen)
 include(wil.cmake)
-
+if(onnxruntime_USE_SUBMODULE)
+    add_library(safeint_interface INTERFACE)
+    target_include_directories(safeint_interface INTERFACE ${REPO_ROOT}/cmake/external/SafeInt/safeint)
+else()
+    FetchContent_Declare(
+      safeint
+      GIT_REPOSITORY https://github.com/dcleblanc/SafeInt.git
+      GIT_TAG        ff15c6ada150a5018c5ef2172401cb4529eac9c0
+    )
+    FetchContent_MakeAvailable(safeint)
+    add_library(safeint_interface INTERFACE)
+    target_include_directories(safeint_interface INTERFACE ${safeint_SOURCE_DIR})
+endif()
 # External dependencies end.
 
 #onnxruntime_EXTERNAL_LIBRARIES could contain onnx, onnx_proto,libprotobuf, cuda/cudnn,
@@ -1718,7 +1726,7 @@ else()
     FetchContent_Declare(
       onnx
       GIT_REPOSITORY https://github.com/onnx/onnx.git
-      GIT_TAG        d75fb0502c9d8fef817d82c15223b4aaae8e8b6e
+      GIT_TAG        850a81b0b77786bf99ea90580242b084f86a6235
     )
     FetchContent_MakeAvailable(onnx)
 endif()
