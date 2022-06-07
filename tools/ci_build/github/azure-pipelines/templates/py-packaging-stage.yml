@@ -73,7 +73,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: set-python-manylinux-variables-step.yml
 
@@ -204,7 +204,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: set-python-manylinux-variables-step.yml
 
@@ -337,7 +337,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: telemetry-steps.yml
 
@@ -544,7 +544,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: telemetry-steps.yml
 
@@ -716,7 +716,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - task: UsePythonVersion@0
         displayName: 'Use Python'
@@ -869,7 +869,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: set-nightly-build-option-variable-step.yml
 

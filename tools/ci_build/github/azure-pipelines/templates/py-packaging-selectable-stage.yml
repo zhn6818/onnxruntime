@@ -59,7 +59,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: get-docker-image-steps.yml
         parameters:
@@ -132,7 +132,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - task: UsePythonVersion@0
         inputs:
@@ -297,7 +297,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - template: set-python-manylinux-variables-step.yml
 
@@ -400,7 +400,7 @@ stages:
       steps:
       - checkout: self
         clean: true
-        submodules: recursive
+        submodules: none
 
       - task: UsePythonVersion@0
         inputs:
