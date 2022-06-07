@@ -7,6 +7,7 @@ jobs:
   steps:
   - checkout: self
     clean: true
+    submodules: none
 
   - task: NodeTool@0
     inputs:
