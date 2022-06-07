@@ -759,8 +759,7 @@ if (NOT WIN32)
     else()
       FetchContent_Declare(
         google_nsync
-        GIT_REPOSITORY https://github.com/google/nsync.git
-        GIT_TAG        cb24e2a21438072e3496a0b8ed2ef0ee0e7e78b0
+        URL https://github.com/google/nsync/archive/refs/tags/1.25.0.zip        
       )
       FetchContent_MakeAvailable(google_nsync)
 	  set(nsync_SOURCE_DIR ${google_nsync_SOURCE_DIR})
