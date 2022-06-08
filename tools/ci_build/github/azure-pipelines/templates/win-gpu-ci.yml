@@ -64,6 +64,9 @@ jobs:
   pool: ${{ parameters.MachinePool }}
   timeoutInMinutes:  300  
   steps:
+  - checkout: self
+    clean: true
+    submodules: none
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '3.7'
