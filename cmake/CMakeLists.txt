@@ -1062,6 +1062,7 @@ set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -DGSL_UNENFORCED_O
 include(eigen)
 include(wil.cmake)
 if(onnxruntime_USE_SUBMODULE)
+    message("Use safeint from submodule")
     add_library(safeint_interface INTERFACE)
     target_include_directories(safeint_interface INTERFACE ${REPO_ROOT}/cmake/external/SafeInt/safeint)
 else()
