@@ -11,7 +11,7 @@ jobs:
   steps:
   - checkout: self
     clean: true
-    submodules: none
+    submodules: recursive
 
   - script: |-
       echo "##vso[task.prependpath]/home/ciagent/conda/bin/"

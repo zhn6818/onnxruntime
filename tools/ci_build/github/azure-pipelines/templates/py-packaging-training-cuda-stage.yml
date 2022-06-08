@@ -102,7 +102,7 @@ stages:
      
       - checkout: self
         clean: true
-        submodules: none
+        submodules: recursive
 
       - template: set-python-manylinux-variables-step.yml
 

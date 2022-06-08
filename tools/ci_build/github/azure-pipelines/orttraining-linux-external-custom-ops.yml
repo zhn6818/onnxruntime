@@ -7,7 +7,7 @@ jobs:
   steps:
   - checkout: self
     clean: true
-    submodules: none
+    submodules: recursive
 
   - template: templates/get-docker-image-steps.yml
     parameters:

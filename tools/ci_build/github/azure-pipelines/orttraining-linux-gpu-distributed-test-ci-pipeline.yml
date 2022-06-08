@@ -9,7 +9,7 @@ jobs:
   steps:
   - checkout: self
     clean: true
-    submodules: none
+    submodules: recursive
 
   - template: templates/run-docker-build-steps.yml
     parameters:
