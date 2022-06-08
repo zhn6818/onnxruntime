@@ -75,6 +75,9 @@ jobs:
       script: |
          rm -rf $(Build.BinariesDirectory)/Release/onnxruntime $(Build.BinariesDirectory)/Release/pybind11
          python3 -m pip install $(Build.BinariesDirectory)/Release/dist/*.whl
+         # The following two lines are for running nodejs tests
+         mkdir -p $(Build.SourcesDirectory)/cmake/external/onnx/onnx/backend/test/data
+         ln -s /data/onnx $(Build.SourcesDirectory)/cmake/external/onnx/onnx/backend/test/data/node
 
   - task: PythonScript@0
     displayName: 'Run Release unit tests'
