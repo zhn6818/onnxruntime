@@ -199,7 +199,7 @@ endif()
 # Single output director for all binaries
 set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin CACHE PATH "Single output directory for all binaries.")
 
-if(EXISTS "${PROJECT_SOURCE_DIR}/cmake/external/onnx/CMakeLists.txt")
+if(EXISTS "${PROJECT_SOURCE_DIR}/external/onnx/CMakeLists.txt")
   set(onnxruntime_USE_SUBMODULE TRUE)
 else()
   include(FetchContent)
