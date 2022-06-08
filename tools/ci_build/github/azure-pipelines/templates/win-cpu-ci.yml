@@ -35,11 +35,6 @@ parameters:
   type: boolean
   default: true
 
-- name: RunStaticCodeAnalysis
-  displayName: Run Static Code Analysis
-  type: boolean
-  default: true
-
 - name: submodules
   type: string
   default: none
