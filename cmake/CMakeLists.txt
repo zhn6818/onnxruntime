@@ -798,7 +798,6 @@ if (Protobuf_FOUND)
     set(PROTOBUF_LIB protobuf::libprotobuf-lite)
   endif()
 else()
-  message("Use protobuf from submodule")  
   # use protobuf as a submodule
   if (CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "Build protobuf tests" FORCE)
@@ -808,7 +807,14 @@ else()
     set(protobuf_DISABLE_RTTI ON CACHE BOOL "Remove runtime type information in the binaries" FORCE)
   endif()
   if(onnxruntime_USE_SUBMODULE)
+    message("Use protobuf from submodule")
     add_subdirectory(${PROJECT_SOURCE_DIR}/external/protobuf/cmake EXCLUDE_FROM_ALL)
+    get_target_property(protobuf_BINARY_DIR libprotoc BINARY_DIR)
+    if(WIN32)
+      #Normally we don't use CMAKE_BUILD_TYPE in cmake files. This is a temp hack for our C# build
+      set(protobuf_BINARY_DIR ${protobuf_BINARY_DIR}/${CMAKE_BUILD_TYPE})
+    endif()
+    set(protobuf_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/protobuf/cmake)
   else()
     FetchContent_Declare(
       protobuf
@@ -1720,6 +1726,7 @@ endif()
 if (NOT onnxruntime_MINIMAL_BUILD)
 if(onnxruntime_USE_SUBMODULE)
    add_subdirectory(external/onnx EXCLUDE_FROM_ALL)
+   set(onnx_SOURCE_DIR ${PROJECT_SOURCE_DIR}/external/onnx)
 else()
     FetchContent_Declare(
       onnx
