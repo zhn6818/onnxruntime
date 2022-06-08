@@ -594,7 +594,15 @@ if (onnxruntime_USE_TENSORRT)
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-missing-field-initializers")
   endif()
   set(CXX_VERSION_DEFINED TRUE)
-  add_subdirectory(${ONNXRUNTIME_ROOT}/../cmake/external/onnx-tensorrt)
+  if(onnxruntime_USE_SUBMODULE)
+    add_subdirectory(${ONNXRUNTIME_ROOT}/../cmake/external/onnx-tensorrt)
+  else()
+    FetchContent_Declare(
+      onnx-tensorrt
+      URL https://github.com/onnx/onnx-tensorrt/archive/f42daeee49f2517a954c5601f0f76bef9ed94b62.zip
+    )
+    FetchContent_MakeAvailable(onnx-tensorrt)
+  endif()
   set(CMAKE_CXX_FLAGS ${OLD_CMAKE_CXX_FLAGS})
   if ( CMAKE_COMPILER_IS_GNUCC )
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
