@@ -27,6 +27,9 @@ jobs:
   timeoutInMinutes:  210
   pool: 'Linux-CPU'
   steps:
+    - checkout: self
+      clean: true
+      submodules: none
     - template: set-version-number-variables-step.yml
     - template: get-docker-image-steps.yml
       parameters:

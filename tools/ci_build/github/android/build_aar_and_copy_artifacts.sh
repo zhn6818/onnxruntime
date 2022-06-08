@@ -12,7 +12,7 @@ export PATH=/opt/python/cp37-cp37m/bin:$PATH
 # if there is also include_ops_and_types.config exists in the same folder, use it to build with included ops/types
 if [ -f "/home/onnxruntimedev/.build_settings/include_ops_and_types.config" ]; then
     python3 /onnxruntime_src/tools/ci_build/github/android/build_aar_package.py \
-        --build_dir /build \
+        --build_dir /build --skip_submodule_sync \
         --config $BUILD_CONFIG \
         --android_sdk_path /android_home \
         --android_ndk_path /ndk_home \
@@ -20,7 +20,7 @@ if [ -f "/home/onnxruntimedev/.build_settings/include_ops_and_types.config" ]; t
         /home/onnxruntimedev/.build_settings/build_settings.json
 else
     python3 /onnxruntime_src/tools/ci_build/github/android/build_aar_package.py \
-        --build_dir /build \
+        --build_dir /build --skip_submodule_sync \
         --config $BUILD_CONFIG \
         --android_sdk_path /android_home \
         --android_ndk_path /ndk_home \

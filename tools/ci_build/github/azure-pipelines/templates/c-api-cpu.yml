@@ -71,6 +71,9 @@ jobs:
     vmImage: 'macOS-11'
   timeoutInMinutes:  240
   steps:
+    - checkout: self
+      clean: true
+      submodules: none
     - template: set-version-number-variables-step.yml
 
     - script: |
