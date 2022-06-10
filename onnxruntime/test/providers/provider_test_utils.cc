@@ -1019,6 +1019,8 @@ void OpTester::Run(
         kNnapiExecutionProvider,
         kRocmExecutionProvider,
         kCoreMLExecutionProvider,
+        kSnpeExecutionProvider,
+        kXnnpackExecutionProvider,
     };
 #endif
 
@@ -1112,6 +1114,11 @@ void OpTester::Run(
           execution_provider = DefaultRocmExecutionProvider();
         else if (provider_type == onnxruntime::kCoreMLExecutionProvider)
           execution_provider = DefaultCoreMLExecutionProvider();
+        else if (provider_type == onnxruntime::kSnpeExecutionProvider)
+          execution_provider = DefaultSnpeExecutionProvider();
+        else if (provider_type == onnxruntime::kXnnpackExecutionProvider)
+          execution_provider = DefaultXnnpackExecutionProvider();
+
         // skip if execution provider is disabled
         if (execution_provider == nullptr)
           continue;
@@ -1131,10 +1138,10 @@ void OpTester::Run(
               // provider_type == onnxruntime::kTvmExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider ||
               provider_type == onnxruntime::kCoreMLExecutionProvider ||
-              provider_type == onnxruntime::kDnnlExecutionProvider)
+              provider_type == onnxruntime::kDnnlExecutionProvider ||
+              provider_type == onnxruntime::kSnpeExecutionProvider)
             continue;
           auto reg = execution_provider->GetKernelRegistry();
-          ASSERT_NE(nullptr, reg);
           if (!KernelRegistry::HasImplementationOf(*reg, node, execution_provider->Type())) {
             valid = false;
             for (auto& custom_session_registry : custom_session_registries_) {
