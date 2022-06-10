@@ -14,94 +14,132 @@ struct BinaryElementwisePreparation {
   const Tensor* lhs_tensor = nullptr;
   const Tensor* rhs_tensor = nullptr;
   Tensor* output_tensor = nullptr;
-  int32_t output_rank_or_simple_broadcast = 0;  // for no_broadcast|left_scalar|right_scalar cases, output_rank uses SimpleBroadcast enums
-
-  TArray<int64_t> lhs_padded_strides;
-  TArray<int64_t> rhs_padded_strides;
-  TArray<fast_divmod> fdm_output_strides;
-
-  // these are for RightPerChannel case
-  fast_divmod fdm_H;
-  fast_divmod fdm_C;
+  TensorShapeVector output_dims;
+  size_t rank;
+  BroadcastIndexType lhs_index_type;
+  BroadcastIndexType rhs_index_type;
+  TensorShapeVector lhs_strides;
+  TensorShapeVector rhs_strides;
+  TensorShapeVector output_strides;
 
   BinaryElementwisePreparation() {}
 
-  Status BinaryElementwiseBroadcastPrepareHelper(const TensorShape& lhs_shape,
-                                                 const TensorShape& rhs_shape,
+  Status BinaryElementwiseBroadcastPrepareHelper(const TensorShape& lhs_shape, const TensorShape& rhs_shape,
                                                  const TensorShape& output_shape) {
-    int32_t lhs_rank = gsl::narrow_cast<int32_t>(lhs_shape.NumDimensions());
-    int32_t rhs_rank = gsl::narrow_cast<int32_t>(rhs_shape.NumDimensions());
-    int32_t out_rank = std::max(lhs_rank, rhs_rank);
+    bool lhs_is_contiguous = true;
+    bool rhs_is_contiguous = true;
+    TensorShapeVector lhs_original_strides = TensorPitches(lhs_shape);
+    TensorShapeVector rhs_original_strides = TensorPitches(rhs_shape);
+#ifndef ORT_MINIMAL_BUILD
+    if (lhs_tensor) {
+      lhs_is_contiguous = lhs_tensor->IsContiguous();
+      if (!lhs_is_contiguous) {
+        ORT_ENFORCE(lhs_tensor->Shape() == lhs_shape);
+        lhs_original_strides = ToShapeVector(lhs_tensor->Strides());
+      }
+    }
+    if (rhs_tensor) {
+      rhs_is_contiguous = rhs_tensor->IsContiguous();
+      if (!rhs_is_contiguous) {
+        ORT_ENFORCE(rhs_tensor->Shape() == rhs_shape);
+        rhs_original_strides = ToShapeVector(rhs_tensor->Strides());
+      }
+    }
+#endif
+    lhs_index_type = lhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                     : lhs_is_contiguous && lhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                      : BroadcastIndexType::NeedCompute;
+    rhs_index_type = rhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                     : rhs_is_contiguous && rhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                      : BroadcastIndexType::NeedCompute;
+    rank = output_shape.NumDimensions();
+    output_dims = output_shape.AsShapeVector();
 
-    // early return when shapes match
-    if (lhs_shape == rhs_shape) {
-      output_rank_or_simple_broadcast = static_cast<int32_t>(SimpleBroadcast::NoBroadcast);
+    // Strides not needed if none of sizes needs compute.
+    if (lhs_index_type != BroadcastIndexType::NeedCompute && rhs_index_type != BroadcastIndexType::NeedCompute) {
       return Status::OK();
     }
 
-    // early return if one operand is scalar
-    if (lhs_shape.Size() == 1 || rhs_shape.Size() == 1) {
-      output_rank_or_simple_broadcast = static_cast<int32_t>(lhs_shape.Size() == 1
-                                                                 ? SimpleBroadcast::LeftScalar
-                                                                 : SimpleBroadcast::RightScalar);
-      return Status::OK();
+    size_t lhs_offset = rank - lhs_original_strides.size();
+    size_t rhs_offset = rank - rhs_original_strides.size();
+    lhs_strides.resize(rank, 0);
+    for (size_t i = 0; i < lhs_original_strides.size(); ++i) {
+      lhs_strides[lhs_offset + i] =
+          (lhs_shape[i] == 1 && output_dims[lhs_offset + i] != 1) ? 0 : lhs_original_strides[i];
+    }
+    rhs_strides.resize(rank, 0);
+    for (size_t i = 0; i < rhs_original_strides.size(); ++i) {
+      rhs_strides[rhs_offset + i] =
+          (rhs_shape[i] == 1 && output_dims[rhs_offset + i] != 1) ? 0 : rhs_original_strides[i];
     }
 
-    // special case for lhs(N,C,H) and rhs (C,1) which is used in conv bias
-    // when N == 1: out[id] = op(lhs[id], rhs[id / H])
-    // When N > 1:  out[id] = op(lhs[id], rhs[id / H % C])
-    if (lhs_shape == output_shape) {
-      const auto& rhs_dims = rhs_shape.GetDims();
-      int64_t C = 0;
-      if (1 == std::count_if(rhs_dims.begin(), rhs_dims.end(),
-                             [&C](int64_t dim) { if (dim != 1) C = dim; return (dim != 1); })) {
-        int32_t dim_C = gsl::narrow_cast<int32_t>(std::find(rhs_dims.begin(), rhs_dims.end(), C) - rhs_dims.begin() + output_shape.NumDimensions() - rhs_shape.NumDimensions());
-        int64_t N = output_shape.SizeToDimension(dim_C);
-        int64_t H = (dim_C < out_rank - 1 ? output_shape.SizeFromDimension(dim_C + 1) : 1);
+    // Coalesce the dimensions.
+    if (rank > 1) {
+      // Reverse the shape and strides for better computation.
+      TensorShapeVector reversed_shape(rank);
+      TensorShapeVector lhs_reversed_strides(rank);
+      TensorShapeVector rhs_reversed_strides(rank);
+      for (size_t dim = 0; dim < rank; ++dim) {
+        reversed_shape[dim] = output_dims[rank - 1 - dim];
+        lhs_reversed_strides[dim] = lhs_strides[rank - 1 - dim];
+        rhs_reversed_strides[dim] = rhs_strides[rank - 1 - dim];
+      }
 
-        std::vector<int64_t> new_output_dims;
-        if (N == 1) {
-          output_rank_or_simple_broadcast = static_cast<int32_t>(SimpleBroadcast::RightPerChannelBatch1);
-          fdm_H = fast_divmod(gsl::narrow_cast<int>(H));
+      // We can coalesce two adjacent dimensions if either dim has size 1 or if:
+      // shape[n] * stride[n] == shape[n + 1].
+      auto CanCoalesce = [&](size_t dim0, size_t dim1) {
+        auto shape0 = reversed_shape[dim0];
+        auto shape1 = reversed_shape[dim1];
+        if (shape0 == 1 || shape1 == 1) {
+          return true;
+        }
+        return shape0 * lhs_reversed_strides[dim0] == lhs_reversed_strides[dim1] &&
+               shape0 * rhs_reversed_strides[dim0] == rhs_reversed_strides[dim1];
+      };
+
+      // Replace each operands stride at dim0 with its stride at dim1.
+      auto ReplaceStride = [&](size_t dim0, size_t dim1) {
+        lhs_reversed_strides[dim0] = lhs_reversed_strides[dim1];
+        rhs_reversed_strides[dim0] = rhs_reversed_strides[dim1];
+      };
+
+      size_t prev_dim = 0;
+      for (size_t dim = 1; dim < rank; ++dim) {
+        if (CanCoalesce(prev_dim, dim)) {
+          if (reversed_shape[prev_dim] == 1) {
+            ReplaceStride(prev_dim, dim);
+          }
+          reversed_shape[prev_dim] *= reversed_shape[dim];
         } else {
-          output_rank_or_simple_broadcast = static_cast<int32_t>(SimpleBroadcast::RightPerChannelBatchN);
-          fdm_H = fast_divmod(gsl::narrow_cast<int>(H));
-          fdm_C = fast_divmod(gsl::narrow_cast<int>(C));
+          prev_dim++;
+          if (prev_dim != dim) {
+            ReplaceStride(prev_dim, dim);
+            reversed_shape[prev_dim] = reversed_shape[dim];
+          }
         }
-        return Status::OK();
+      }
+
+      rank = prev_dim + 1;
+      reversed_shape.resize(rank);
+      lhs_reversed_strides.resize(rank);
+      rhs_reversed_strides.resize(rank);
+
+      // Reverse the shape and strides back.
+      output_dims.resize(rank);
+      lhs_strides.resize(rank);
+      rhs_strides.resize(rank);
+      for (size_t dim = 0; dim < rank; ++dim) {
+        output_dims[dim] = reversed_shape[rank - 1 - dim];
+        lhs_strides[dim] = lhs_reversed_strides[rank - 1 - dim];
+        rhs_strides[dim] = rhs_reversed_strides[rank - 1 - dim];
       }
     }
 
-    output_rank_or_simple_broadcast = out_rank;
-
-    if (lhs_shape != output_shape) {
-      TensorPitches original_lhs_padded_strides(lhs_shape.GetDims(), out_rank);
-      lhs_padded_strides.SetSize(out_rank);
-      auto offset = out_rank - lhs_rank;
-      for (auto i = offset; i < out_rank; ++i) {
-        // the stride for broadcast dimension is kept as 0
-        if (lhs_shape.GetDims()[i - offset] != 1) {
-          lhs_padded_strides[i] = original_lhs_padded_strides[i];
-        }
-      }
-    }
-
-    if (rhs_shape != output_shape) {
-      TensorPitches original_rhs_padded_strides(rhs_shape.GetDims(), out_rank);
-      rhs_padded_strides.SetSize(out_rank);
-      auto offset = out_rank - rhs_rank;
-      for (auto i = offset; i < out_rank; ++i) {
-        // the stride for broadcast dimension is kept as 0
-        if (rhs_shape.GetDims()[i - offset] != 1) {
-          rhs_padded_strides[i] = original_rhs_padded_strides[i];
-        }
-      }
-    }
-
-    TensorPitches original_output_strides(output_shape.GetDims());
-    fdm_output_strides.SetSize(out_rank);
-    for (auto i = 0; i < out_rank; ++i) {
-      fdm_output_strides[i] = fast_divmod(gsl::narrow_cast<int>(original_output_strides[i]));
+    output_strides.resize(rank);
+    int64_t running_size = 1;
+    for (size_t dim = 0; dim < rank; ++dim) {
+      output_strides[rank - 1 - dim] = running_size;
+      running_size *= output_dims[rank - 1 - dim];
     }
 
     return Status::OK();
@@ -219,17 +257,11 @@ class CompareFunction : public BinaryElementwise<ShouldBroadcast> {
  public:
   CompareFunction(const OpKernelInfo& info) : BinaryElementwise(info) {}
 
-  typedef void (*ImplCompare)(cudaStream_t stream,
-                              int32_t output_rank_or_simple_broadcast,
-                              const TArray<int64_t>* lhs_padded_strides,
-                              const CudaT* lhs_data,
-                              const TArray<int64_t>* rhs_padded_strides,
-                              const CudaT* rhs_data,
-                              const TArray<fast_divmod>* fdm_output_strides,
-                              const fast_divmod& fdm_H,
-                              const fast_divmod& fdm_C,
-                              bool* output_data,
-                              size_t count);
+  typedef void (*ImplCompare)(cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type,
+                              BroadcastIndexType rhs_index_type, gsl::span<const int64_t> lhs_strides,
+                              gsl::span<const int64_t> rhs_strides, gsl::span<const int64_t> output_shapes,
+                              gsl::span<const int64_t> output_strides, const CudaT* lhs_data, const CudaT* rhs_data,
+                              bool* output_data, size_t count);
 
   Status CompareMethod(OpKernelContext* context, ImplCompare Impl_Compare) const;
 };

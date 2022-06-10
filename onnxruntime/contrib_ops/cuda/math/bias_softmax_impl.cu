@@ -13,6 +13,7 @@
 #include "core/providers/cuda/math/binary_elementwise_ops_impl_functors.cuh"
 #include "core/providers/cuda/math/softmax_warpwise_impl.cuh"
 #include "core/providers/cuda/shared_inc/accumulation_type.h"
+#include "core/providers/cpu/tensor/utils.h"
 
 using namespace onnxruntime;
 using namespace onnxruntime::cuda;
@@ -250,50 +251,27 @@ Status DispatchBiasSoftMaxForwardViaDnnLibraryImpl(
   const auto* B_data = reinterpret_cast<const CudaT*>(B->template Data<T>());
   auto* Y_data = reinterpret_cast<CudaT*>(Y->template MutableData<T>());
 
-  int X_num_dim = static_cast<int>(X_shape.NumDimensions());
-
   // binary elementise kernel requires input pitches
-  TArray<int64_t> lhs_padded_strides(X_num_dim);
-  int64_t lhs_pitch = 1, rhs_pitch = 1;
-  for (int i = -1; i >= -X_num_dim; i--) {
-    int positive_i = X_num_dim + i;
-    lhs_padded_strides[positive_i] = lhs_pitch;
-    lhs_pitch *= X_shape[positive_i];
-  }
-
-  // set pitches for bias so it broadcasts along relevant dimensions
-  TArray<int64_t> rhs_padded_strides(X_num_dim);
-  for (int i = -1; i >= -X_num_dim; i--) {
-    int positive_ix = X_num_dim + i;
-    int positive_ib = static_cast<int>(B_shape.NumDimensions()) + i;
-    if (broadcast_axis <= positive_ix && positive_ix < softmax_axis) {
-      rhs_padded_strides[positive_ix] = 0;
+  // lhs_shape == output_shape, rhs_tensor may need boradcast
+  TensorShapeVector lhs_strides = TensorPitches(X_shape);
+  TensorShapeVector rhs_strides(X_shape.NumDimensions());
+  int64_t rhs_pitch = 1;
+  for (int i = -1; i >= -(int)X_shape.NumDimensions(); i--) {
+    size_t positive_ix = X_shape.NumDimensions() + i;
+    size_t positive_ib = B_shape.NumDimensions() + i;
+    if (broadcast_axis <= static_cast<int>(positive_ix) && static_cast<int>(positive_ix) < softmax_axis) {
+      rhs_strides[positive_ix] = 0;
       continue;
     }
-    rhs_padded_strides[positive_ix] = rhs_pitch;
+    rhs_strides[positive_ix] = rhs_pitch;
     rhs_pitch *= B_shape[positive_ib];
   }
 
-  TArray<fast_divmod> fdm_output_strides(X_num_dim);
-  //TODO: fast_divmod only supports int32
-  for (int i = 0; i < fdm_output_strides.Size(); i++)
-    fdm_output_strides[i] = fast_divmod(static_cast<int>(lhs_padded_strides[i]));
-  fast_divmod fdm_H, fdm_C;
-
   // invoke elementwise add with broadcast kernel
-  ::onnxruntime::cuda::BinaryElementWiseImpl(
-      stream,
-      (int32_t)X_num_dim,
-      &lhs_padded_strides,
-      X_data,
-      &rhs_padded_strides,
-      B_data,
-      &fdm_output_strides,
-      fdm_H,
-      fdm_C,
-      Y_data,
-      OP_Add<CudaT, CudaT, CudaT>(),
-      (size_t)X_shape.Size());
+  ::onnxruntime::cuda::BinaryElementWiseImpl(stream, X_shape.NumDimensions(), BroadcastIndexType::NoBroadcast,
+                                             BroadcastIndexType::NeedCompute, lhs_strides, rhs_strides,
+                                             X_shape.AsShapeVector(), lhs_strides, X_data, B_data, Y_data,
+                                             OP_Add<CudaT, CudaT, CudaT>(), (size_t)X_shape.Size());
 
   // invoke cuda DNN library for Y = softmax(X)
   std::vector<int64_t> dims({batch_count, 1, 1, element_count});

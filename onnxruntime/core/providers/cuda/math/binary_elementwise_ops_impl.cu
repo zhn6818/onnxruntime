@@ -10,74 +10,31 @@
 namespace onnxruntime {
 namespace cuda {
 
-#define BINARY_ELEMENTWISE_IMPL(name)                      \
-  BINARY_ELEMENTWISE_IMPL_DECLARATION(name) {              \
-    BinaryElementWiseImpl(stream,                          \
-                          output_rank_or_simple_broadcast, \
-                          lhs_padded_strides,              \
-                          lhs_data,                        \
-                          rhs_padded_strides,              \
-                          rhs_data,                        \
-                          fdm_output_strides,              \
-                          fdm_H,                           \
-                          fdm_C,                           \
-                          output_data,                     \
-                          OP_##name<T, T, T>(),            \
-                          count);                          \
+#define BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T1, T2)                                                         \
+  stream, rank, lhs_index_type, rhs_index_type, lhs_strides, rhs_strides, output_shapes, output_strides, lhs_data, \
+      rhs_data, output_data, OP_##name<T, T1, T2>(), count
+
+#define BINARY_ELEMENTWISE_IMPL(name) \
+  BINARY_ELEMENTWISE_IMPL_DECLARATION(name) { BinaryElementWiseImpl(BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T, T)); }
+
+#define BINARY_ELEMENTWISE_IMPL_T1(name)                                      \
+  BINARY_ELEMENTWISE_IMPL_DECLARATION_T1(name) {                              \
+    BinaryElementWiseImpl(BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T, T1)); \
   }
 
-#define BINARY_ELEMENTWISE_IMPL_T1(name)                   \
-  BINARY_ELEMENTWISE_IMPL_DECLARATION_T1(name) {           \
-    BinaryElementWiseImpl(stream,                          \
-                          output_rank_or_simple_broadcast, \
-                          lhs_padded_strides,              \
-                          lhs_data,                        \
-                          rhs_padded_strides,              \
-                          rhs_data,                        \
-                          fdm_output_strides,              \
-                          fdm_H,                           \
-                          fdm_C,                           \
-                          output_data,                     \
-                          OP_##name<T, T, T1>(),           \
-                          count);                          \
+#define BINARY_ELEMENTWISE_IMPL_T2(name)                                       \
+  BINARY_ELEMENTWISE_IMPL_DECLARATION_T2(name) {                               \
+    BinaryElementWiseImpl(BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T1, T2)); \
   }
 
-#define BINARY_ELEMENTWISE_IMPL_T2(name)                   \
-  BINARY_ELEMENTWISE_IMPL_DECLARATION_T2(name) {           \
-    BinaryElementWiseImpl(stream,                          \
-                          output_rank_or_simple_broadcast, \
-                          lhs_padded_strides,              \
-                          lhs_data,                        \
-                          rhs_padded_strides,              \
-                          rhs_data,                        \
-                          fdm_output_strides,              \
-                          fdm_H,                           \
-                          fdm_C,                           \
-                          output_data,                     \
-                          OP_##name<T, T1, T2>(),          \
-                          count);                          \
-  }
+#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T) \
+  template void Impl_##x<T>(BINARY_ELEMENTWISE_IMPL_ARGUMENTS_DECLARATION(T, T, T));
 
-#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T)                                         \
-  template void Impl_##x<T>(cudaStream_t stream,                                          \
-                            int32_t output_rank,                                          \
-                            const TArray<int64_t>* lhs_padded_strides, const T* lhs_data, \
-                            const TArray<int64_t>* rhs_padded_strides, const T* rhs_data, \
-                            const TArray<fast_divmod>* fdm_output_strides, const fast_divmod& fdm_H, const fast_divmod& fdm_C, T* output_data, size_t count);
+#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL_T1(x, T, T1) \
+  template void ImplT1_##x<T, T1>(BINARY_ELEMENTWISE_IMPL_ARGUMENTS_DECLARATION(T, T, T1));
 
-#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL_T1(x, T, T1)                                         \
-  template void ImplT1_##x<T, T1>(cudaStream_t stream,                                           \
-                                  int32_t output_rank,                                           \
-                                  const TArray<int64_t>* lhs_padded_strides, const T* lhs_data,  \
-                                  const TArray<int64_t>* rhs_padded_strides, const T1* rhs_data, \
-                                  const TArray<fast_divmod>* fdm_output_strides, const fast_divmod& fdm_H, const fast_divmod& fdm_C, T* output_data, size_t count);
-
-#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL_T2(x, T, T1, T2)                                         \
-  template void ImplT2_##x<T, T1, T2>(cudaStream_t stream,                                           \
-                                      int32_t output_rank,                                           \
-                                      const TArray<int64_t>* lhs_padded_strides, const T1* lhs_data, \
-                                      const TArray<int64_t>* rhs_padded_strides, const T2* rhs_data, \
-                                      const TArray<fast_divmod>* fdm_output_strides, const fast_divmod& fdm_H, const fast_divmod& fdm_C, T* output_data, size_t count);
+#define SPECIALIZED_BINARY_ELEMENTWISE_IMPL_T2(x, T, T1, T2) \
+  template void ImplT2_##x<T, T1, T2>(BINARY_ELEMENTWISE_IMPL_ARGUMENTS_DECLARATION(T, T1, T2));
 
 #define SPECIALIZED_BINARY_ELEMENTWISE_IMPL_UZILHFD(x) \
   SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, uint32_t)     \

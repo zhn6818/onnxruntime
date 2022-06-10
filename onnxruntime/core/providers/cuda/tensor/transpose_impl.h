@@ -8,11 +8,10 @@
 namespace onnxruntime {
 namespace cuda {
 
-bool CanDoTranspose3D(const cudaDeviceProp& prop,
-                      size_t rank, const gsl::span<const int64_t>& input_dims, const gsl::span<const size_t>& permutations,
-                      dim3& grid_size, dim3& block_size);
-Status Transpose3DImpl(cudaStream_t stream, size_t element_size, const TArray<int64_t>& input_shape, const TArray<int64_t>& input_strides, const void* input_data,
-                       void* output_data, int64_t N,
+bool CanDoTranspose3D(const cudaDeviceProp& prop, size_t rank, const gsl::span<const int64_t>& input_dims,
+                      const gsl::span<const size_t>& permutations, dim3& grid_size, dim3& block_size);
+Status Transpose3DImpl(cudaStream_t stream, size_t element_size, const TArray<int64_t>& input_strides,
+                       const TArray<int64_t>& output_strides, const void* input_data, void* output_data, int64_t N,
                        const dim3& grid_size, const dim3& block_size);
 
 bool CanDoTranspose4DParallelizeMultipleElementsPerThreadInInnermostDim(const cudaDeviceProp& prop,

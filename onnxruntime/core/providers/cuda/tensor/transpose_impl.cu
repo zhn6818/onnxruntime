@@ -10,7 +10,7 @@ namespace cuda {
 constexpr unsigned int NUM_ELE_PER_THREAD = 4;
 
 template <typename T, unsigned int TILE_DIM>
-__global__ void Transpose3DKernel(const TArray<int64_t> input_shape, const TArray<int64_t> input_strides,
+__global__ void Transpose3DKernel(const TArray<int64_t> input_strides, const TArray<int64_t> output_strides,
                                   const T* input_data, T* output_data) {
   __shared__ T tile[TILE_DIM][TILE_DIM + 1];
 
@@ -19,7 +19,8 @@ __global__ void Transpose3DKernel(const TArray<int64_t> input_shape, const TArra
 
 #pragma unroll
   for (unsigned int i = 0; i < TILE_DIM; i += (TILE_DIM / NUM_ELE_PER_THREAD)) {
-    tile[threadIdx.y + i][threadIdx.x] = input_data[blockIdx.z * input_strides[0] + (y + i) * input_shape[2] + x];
+    tile[threadIdx.y + i][threadIdx.x] =
+        input_data[blockIdx.z * input_strides[0] + (y + i) * input_strides[1] + x * input_strides[2]];
   }
   __syncthreads();
 
@@ -28,7 +29,7 @@ __global__ void Transpose3DKernel(const TArray<int64_t> input_shape, const TArra
 
 #pragma unroll
   for (unsigned int i = 0; i < TILE_DIM; i += (TILE_DIM / NUM_ELE_PER_THREAD)) {
-    output_data[blockIdx.z * input_strides[0] + (y + i) * input_shape[1] + x] = tile[threadIdx.x][threadIdx.y + i];
+    output_data[blockIdx.z * output_strides[0] + (y + i) * output_strides[1] + x] = tile[threadIdx.x][threadIdx.y + i];
   }
 }
 
@@ -62,9 +63,9 @@ bool CanDoTranspose3D(const cudaDeviceProp& prop, size_t rank, const gsl::span<c
   return false;
 }
 
-#define CALL_TRANSPOSE_3D(type, tile_dim)                                                            \
-  Transpose3DKernel<type, tile_dim><<<grid_size, block_size, 0, stream>>>(                           \
-      input_shape, input_strides, reinterpret_cast<const ToCudaType<type>::MappedType*>(input_data), \
+#define CALL_TRANSPOSE_3D(type, tile_dim)                                                               \
+  Transpose3DKernel<type, tile_dim><<<grid_size, block_size, 0, stream>>>(                              \
+      input_strides, output_strides, reinterpret_cast<const ToCudaType<type>::MappedType*>(input_data), \
       reinterpret_cast<ToCudaType<type>::MappedType*>(output_data))
 
 #define HANDLE_TRANSPOSE_3D_TILE_DIM(type) \
@@ -76,8 +77,8 @@ bool CanDoTranspose3D(const cudaDeviceProp& prop, size_t rank, const gsl::span<c
     }                                      \
   } break
 
-Status Transpose3DImpl(cudaStream_t stream, size_t element_size, const TArray<int64_t>& input_shape,
-                       const TArray<int64_t>& input_strides, const void* input_data, void* output_data, int64_t N,
+Status Transpose3DImpl(cudaStream_t stream, size_t element_size, const TArray<int64_t>& input_strides,
+                       const TArray<int64_t>& output_strides, const void* input_data, void* output_data, int64_t N,
                        const dim3& grid_size, const dim3& block_size) {
   switch (element_size) {
     HANDLE_TRANSPOSE_3D_TILE_DIM(int8_t);
