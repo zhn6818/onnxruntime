@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 #include "test/providers/provider_test_utils.h"
 #include "core/util/math.h"
+#include "test/providers/kernel_compute_test_utils.h"
 
 namespace onnxruntime {
 namespace test {
@@ -182,6 +183,22 @@ TEST(ExpandOpTest, Expand_scalar_int32) {
                           9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9});
   test.Run();
 }
+
+#ifdef ENABLE_TRAINING
+TEST(ExpandOpTest, Strided) {
+  KernelComputeTester test("Expand", kCudaExecutionProvider);
+  test.AddInput<float>("input_0", {3, 1}, {1.f, 2.f, 3.f});
+  test.AddInput<int64_t>("input_1", {2}, {1, 3}, {}, true);
+  test.AddOutput<float>("output", {3, 3}, {1.f, 1.f, 1.f, 2.f, 2.f, 2.f, 3.f, 3.f, 3.f});
+  test.Run();
+
+  KernelComputeTester test2("Expand", kCudaExecutionProvider);
+  test2.AddInput<float>("input_0", {3, 1}, {1.f, 2.f, 3.f});
+  test2.AddInput<int64_t>("input_1", {2}, {1, 3}, {}, true);
+  test2.AddOutput<float>("output", {3, 3}, {1.f, 2.f, 3.f}, {1, 0});
+  test2.Run({0});
+}
+#endif
 
 }  //namespace test
 }  //namespace onnxruntime
