@@ -18,11 +18,13 @@ ONNX_OPERATOR_KERNEL_EX(
         .TypeConstraint("T2", DataTypeImpl::AllFixedSizeTensorTypes()),
     ConstantOfShape);
 
+// NOTE: FOR DEBUG, always generate strided tensor.
 Status ConstantOfShape::ComputeInternal(OpKernelContext* ctx) const {
   Tensor* output_tensor = nullptr;
-  ORT_RETURN_IF_ERROR(PrepareCompute(ctx, &output_tensor));
+  bool is_strided = false;
+  ORT_RETURN_IF_ERROR(PrepareCompute(ctx, &output_tensor, is_strided));
   auto output_data = output_tensor->MutableDataRaw();
-  const auto size = output_tensor->Shape().Size();
+  const auto size = is_strided ? 1 : output_tensor->Shape().Size();
   const void* value_ptr = GetValuePtr();
   const auto element_size = output_tensor->DataType()->Size();
 
