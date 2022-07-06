@@ -4,6 +4,8 @@
 #include "core/providers/shared_library/provider_api.h"
 #include "core/providers/cuda/gpu_data_transfer.h"
 #include "cuda_common.h"
+#include "core/framework/shape_utils.h"
+#include "core/providers/cuda/tensor/copy.h"
 
 // use default stream for copy for now, to avoid racing in BFC arena as in issue #4829
 // note this may cause some models to run slower if there are ops running on CPU
@@ -44,6 +46,14 @@ common::Status GPUDataTransfer::CopyTensor(const Tensor& src, Tensor& dst, int e
 
   auto& src_device = src.Location().device;
   auto& dst_device = dst.Location().device;
+
+#ifdef ENABLE_TRAINING
+  if (!src.IsContiguous() || !dst.IsContiguous()) {
+    // Only support copy between same device fro now.
+    ORT_ENFORCE(src_device.Type() == OrtDevice::GPU && dst_device.Type() == OrtDevice::GPU);
+    return cuda::StridedCopyTensor(GetStream(exec_queue_id), src, dst);
+  }
+#endif
 
   if (dst_device.Type() == OrtDevice::GPU) {
     if (src_device.Type() == OrtDevice::CPU && src_device.MemType() == OrtDevice::MemType::CUDA_PINNED) {

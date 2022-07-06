@@ -7,15 +7,11 @@
 #include "core/common/common.h"
 #include "core/framework/tensor.h"
 #include "core/framework/op_kernel_type_control_utils.h"
+#include "core/framework/shape_utils.h"
 
 #include <vector>
 
 namespace onnxruntime {
-
-void CoalesceDimensions(
-    std::initializer_list<std::reference_wrapper<TensorShapeVector>>&& tensors_strides, TensorShapeVector& shape);
-
-TensorShapeVector StridesForTensor(const Tensor& tensor);
 
 namespace strided_copy_detail {
 

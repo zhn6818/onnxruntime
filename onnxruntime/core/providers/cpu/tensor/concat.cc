@@ -8,6 +8,7 @@
 #include "core/framework/copy.h"
 #include "core/providers/common.h"
 #include "core/providers/op_kernel_type_control.h"
+#include "core/framework/shape_utils.h"
 
 namespace onnxruntime {
 

@@ -4,6 +4,7 @@
 #include "core/providers/cuda/math/binary_elementwise_ops.h"
 #include "core/providers/cuda/math/binary_elementwise_ops_impl.h"
 #include "core/providers/cuda/math/unary_elementwise_ops_impl.h"
+#include "core/framework/shape_utils.h"
 
 using namespace onnxruntime::common;
 namespace onnxruntime {
@@ -87,68 +88,8 @@ void BinaryElementwisePreparation::BinaryElementwiseBroadcastPrepareHelper(const
     rhs_strides[rhs_offset + i] = (rhs_shape[i] == 1 && output_dims[rhs_offset + i] != 1) ? 0 : rhs_original_strides[i];
   }
 
-  // Coalesce the dimensions.
-  if (rank > 1) {
-    // Reverse the shape and strides for better computation.
-    TensorShapeVector reversed_shape(rank);
-    TensorShapeVector lhs_reversed_strides(rank);
-    TensorShapeVector rhs_reversed_strides(rank);
-    for (size_t dim = 0; dim < rank; ++dim) {
-      reversed_shape[dim] = output_dims[rank - 1 - dim];
-      lhs_reversed_strides[dim] = lhs_strides[rank - 1 - dim];
-      rhs_reversed_strides[dim] = rhs_strides[rank - 1 - dim];
-    }
-
-    // We can coalesce two adjacent dimensions if either dim has size 1 or if:
-    // shape[n] * stride[n] == shape[n + 1].
-    auto CanCoalesce = [&](size_t dim0, size_t dim1) {
-      auto shape0 = reversed_shape[dim0];
-      auto shape1 = reversed_shape[dim1];
-      if (shape0 == 1 || shape1 == 1) {
-        return true;
-      }
-      return shape0 * lhs_reversed_strides[dim0] == lhs_reversed_strides[dim1] &&
-             shape0 * rhs_reversed_strides[dim0] == rhs_reversed_strides[dim1];
-    };
-
-    // Replace each operands stride at dim0 with its stride at dim1.
-    auto ReplaceStride = [&](size_t dim0, size_t dim1) {
-      lhs_reversed_strides[dim0] = lhs_reversed_strides[dim1];
-      rhs_reversed_strides[dim0] = rhs_reversed_strides[dim1];
-    };
-
-    size_t prev_dim = 0;
-    for (size_t dim = 1; dim < rank; ++dim) {
-      if (CanCoalesce(prev_dim, dim)) {
-        if (reversed_shape[prev_dim] == 1) {
-          ReplaceStride(prev_dim, dim);
-        }
-        reversed_shape[prev_dim] *= reversed_shape[dim];
-      } else {
-        prev_dim++;
-        if (prev_dim != dim) {
-          ReplaceStride(prev_dim, dim);
-          reversed_shape[prev_dim] = reversed_shape[dim];
-        }
-      }
-    }
-
-    rank = prev_dim + 1;
-    reversed_shape.resize(rank);
-    lhs_reversed_strides.resize(rank);
-    rhs_reversed_strides.resize(rank);
-
-    // Reverse the shape and strides back.
-    output_dims.resize(rank);
-    lhs_strides.resize(rank);
-    rhs_strides.resize(rank);
-    for (size_t dim = 0; dim < rank; ++dim) {
-      output_dims[dim] = reversed_shape[rank - 1 - dim];
-      lhs_strides[dim] = lhs_reversed_strides[rank - 1 - dim];
-      rhs_strides[dim] = rhs_reversed_strides[rank - 1 - dim];
-    }
-  }
-
+  CoalesceDimensions({lhs_strides, rhs_strides}, output_dims);
+  rank = output_dims.size();
   args.rank = rank;
 
   // special case for lhs(N,C,H) and rhs (C,1) which is used in conv bias
