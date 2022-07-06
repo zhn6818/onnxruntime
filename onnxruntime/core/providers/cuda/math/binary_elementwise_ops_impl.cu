@@ -10,9 +10,8 @@
 namespace onnxruntime {
 namespace cuda {
 
-#define BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T1, T2)                                                         \
-  stream, rank, lhs_index_type, rhs_index_type, lhs_strides, rhs_strides, output_shapes, output_strides, lhs_data, \
-      rhs_data, output_data, OP_##name<T, T1, T2>(), count
+#define BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T1, T2) \
+  stream, lhs_data, rhs_data, output_data, args, OP_##name<T, T1, T2>()
 
 #define BINARY_ELEMENTWISE_IMPL(name) \
   BINARY_ELEMENTWISE_IMPL_DECLARATION(name) { BinaryElementWiseImpl(BINARY_ELEMENTWISE_IMPL_ARGUMENTS(name, T, T, T)); }

@@ -13,7 +13,6 @@
 #include "core/providers/cuda/math/binary_elementwise_ops_impl_functors.cuh"
 #include "core/providers/cuda/math/softmax_warpwise_impl.cuh"
 #include "core/providers/cuda/shared_inc/accumulation_type.h"
-#include "core/providers/cpu/tensor/utils.h"
 
 using namespace onnxruntime;
 using namespace onnxruntime::cuda;
@@ -126,26 +125,11 @@ __global__ void BiasSoftmaxWarpForward(
 }
 
 template <typename T>
-void DispatchBiasSoftmaxForwardImpl(
-    cudaStream_t stream,
-    Tensor* output_tensor,
-    const Tensor* input_tensor,
-    const Tensor* input_bias_tensor,
-    int element_count,
-    int batch_count,
-    int batch_stride,
-    int bias_broadcast_size_per_batch) {
-  typedef typename ToCudaType<T>::MappedType CudaT;
-  typedef CudaT input_t;
-  typedef CudaT output_t;
-  typedef AccumulationType_t<CudaT> acc_t;
-
-  const auto* input = reinterpret_cast<const CudaT*>(input_tensor->template Data<T>());
-  const auto* input_bias = reinterpret_cast<const CudaT*>(input_bias_tensor->template Data<T>());
-  auto* output = reinterpret_cast<CudaT*>(output_tensor->template MutableData<T>());
-
-  if (element_count == 0)
-    return;
+void DispatchBiasSoftmaxForwardImpl(cudaStream_t stream, T* output_data, const T* input_data, const T* bias_data,
+                                    int element_count, int batch_count, int batch_stride,
+                                    int bias_broadcast_size_per_batch) {
+  typedef AccumulationType_t<T> acc_t;
+  if (element_count == 0) return;
 
   int log2_elements = log2_ceil(element_count);
   const int next_power_of_two = 1 << log2_elements;
@@ -166,151 +150,65 @@ void DispatchBiasSoftmaxForwardImpl(
 
   // Launch code would be more elegant if C++ supported FOR CONSTEXPR
   switch (log2_elements) {
-    case 0:  // 1
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 0>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 1:  // 2
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 1>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 2:  // 4
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 2>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 3:  // 8
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 3>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 4:  // 16
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 4>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 5:  // 32
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 5>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 6:  // 64
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 6>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 7:  // 128
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 7>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 8:  // 256
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 8>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 9:  // 512
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 9>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    case 10:  // 1024
-      BiasSoftmaxWarpForward<input_t, output_t, acc_t, 10>
-          <<<blocks, threads, 0, stream>>>(output, input, input_bias, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch);
-      break;
-    default:
-      break;
+#define CASE_LOG2_ELEMENTS(v)                                                                                         \
+  case v: {                                                                                                           \
+    BiasSoftmaxWarpForward<T, T, acc_t, v><<<blocks, threads, 0, stream>>>(                                           \
+        output_data, input_data, bias_data, element_count, batch_count, batch_stride, bias_broadcast_size_per_batch); \
+  } break
+    CASE_LOG2_ELEMENTS(0);   // 1
+    CASE_LOG2_ELEMENTS(1);   // 2
+    CASE_LOG2_ELEMENTS(2);   // 4
+    CASE_LOG2_ELEMENTS(3);   // 8
+    CASE_LOG2_ELEMENTS(4);   // 16
+    CASE_LOG2_ELEMENTS(5);   // 32
+    CASE_LOG2_ELEMENTS(6);   // 64
+    CASE_LOG2_ELEMENTS(7);   // 128
+    CASE_LOG2_ELEMENTS(8);   // 256
+    CASE_LOG2_ELEMENTS(9);   // 512
+    CASE_LOG2_ELEMENTS(10);  // 1024
+#undef CASE_LOG2_ELEMENTS
   }
 }
 
-#define SPECIALIZED_BIAS_SOFTMAX_IMPL(T)           \
-  template void DispatchBiasSoftmaxForwardImpl<T>( \
-      cudaStream_t stream,                         \
-      Tensor * output_tensor,                      \
-      const Tensor* input_tensor,                  \
-      const Tensor* input_bias_tensor,             \
-      int element_count,                           \
-      int batch_count,                             \
-      int batch_stride,                            \
-      int bias_broadcast_size_per_batch);
+#define SPECIALIZED_BIAS_SOFTMAX_IMPL(T)                                                                     \
+  template void DispatchBiasSoftmaxForwardImpl<T>(cudaStream_t stream, T * output_data, const T* input_data, \
+                                                  const T* bias_data, int element_count, int batch_count,    \
+                                                  int batch_stride, int bias_broadcast_size_per_batch);
 
 SPECIALIZED_BIAS_SOFTMAX_IMPL(double)
 SPECIALIZED_BIAS_SOFTMAX_IMPL(float)
-SPECIALIZED_BIAS_SOFTMAX_IMPL(MLFloat16)
+SPECIALIZED_BIAS_SOFTMAX_IMPL(half)
 
 // For large element count we fall back to explicit Add kernel + CUDA DNN library
 // note: This is an unhappy path! There is no performance benefit for the fusion.
 template <typename T>
-Status DispatchBiasSoftMaxForwardViaDnnLibraryImpl(
-    cudaStream_t stream,
-    cudnnHandle_t cudaDnnHandle,
-    int element_count,
-    int batch_count,
-    int broadcast_axis,
-    int softmax_axis,
-    const onnxruntime::TensorShape& X_shape,
-    const onnxruntime::Tensor* X,
-    const onnxruntime::TensorShape& B_shape,
-    const onnxruntime::Tensor* B,
-    onnxruntime::Tensor* Y) {
-  typedef typename ToCudaType<T>::MappedType CudaT;
-
-  const auto* X_data = reinterpret_cast<const CudaT*>(X->template Data<T>());
-  const auto* B_data = reinterpret_cast<const CudaT*>(B->template Data<T>());
-  auto* Y_data = reinterpret_cast<CudaT*>(Y->template MutableData<T>());
-
-  // binary elementise kernel requires input pitches
-  // lhs_shape == output_shape, rhs_tensor may need boradcast
-  TensorShapeVector lhs_strides = TensorPitches(X_shape);
-  TensorShapeVector rhs_strides(X_shape.NumDimensions());
-  int64_t rhs_pitch = 1;
-  for (int i = -1; i >= -(int)X_shape.NumDimensions(); i--) {
-    size_t positive_ix = X_shape.NumDimensions() + i;
-    size_t positive_ib = B_shape.NumDimensions() + i;
-    if (broadcast_axis <= static_cast<int>(positive_ix) && static_cast<int>(positive_ix) < softmax_axis) {
-      rhs_strides[positive_ix] = 0;
-      continue;
-    }
-    rhs_strides[positive_ix] = rhs_pitch;
-    rhs_pitch *= B_shape[positive_ib];
-  }
-
-  // invoke elementwise add with broadcast kernel
-  ::onnxruntime::cuda::BinaryElementWiseImpl(stream, X_shape.NumDimensions(), BroadcastIndexType::NoBroadcast,
-                                             BroadcastIndexType::NeedCompute, lhs_strides, rhs_strides,
-                                             X_shape.AsShapeVector(), lhs_strides, X_data, B_data, Y_data,
-                                             OP_Add<CudaT, CudaT, CudaT>(), (size_t)X_shape.Size());
+Status DispatchBiasSoftMaxForwardViaDnnLibraryImpl(cudaStream_t stream, cudnnHandle_t cudaDnnHandle, int element_count,
+                                                   int batch_count, int broadcast_axis, int softmax_axis,
+                                                   const T* X_data, const T* B_data, T* Y_data,
+                                                   const BinaryElementwiseArgs& args) {
+  BinaryElementWiseImpl(stream, X_data, B_data, Y_data, args, OP_Add<T, T, T>());
 
   // invoke cuda DNN library for Y = softmax(X)
   std::vector<int64_t> dims({batch_count, 1, 1, element_count});
-  const auto alpha = Consts<CudaT>::One;
-  const auto beta = Consts<CudaT>::Zero;
+  const auto alpha = Consts<T>::One;
+  const auto beta = Consts<T>::Zero;
   CudnnTensor input_tensor, output_tensor;
-  ORT_RETURN_IF_ERROR(input_tensor.Set(dims, CudnnTensor::GetDataType<CudaT>()));
-  ORT_RETURN_IF_ERROR(output_tensor.Set(dims, CudnnTensor::GetDataType<CudaT>()));
-  cudnnSoftmaxForward(
-      cudaDnnHandle,
-      CUDNN_SOFTMAX_ACCURATE,
-      CUDNN_SOFTMAX_MODE_INSTANCE,
-      &alpha,
-      input_tensor,
-      Y_data,
-      &beta,
-      output_tensor,
-      Y_data);
+  ORT_RETURN_IF_ERROR(input_tensor.Set(dims, CudnnTensor::GetDataType<T>()));
+  ORT_RETURN_IF_ERROR(output_tensor.Set(dims, CudnnTensor::GetDataType<T>()));
+  cudnnSoftmaxForward(cudaDnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE, &alpha, input_tensor, Y_data,
+                      &beta, output_tensor, Y_data);
 
   return Status::OK();
 }
 
-#define SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(T)                  \
-  template Status DispatchBiasSoftMaxForwardViaDnnLibraryImpl<T>( \
-      cudaStream_t stream,                                        \
-      cudnnHandle_t cudaDnnHandle,                                \
-      int element_count,                                          \
-      int batch_count,                                            \
-      int broadcast_axis,                                         \
-      int softmax_axis,                                           \
-      const onnxruntime::TensorShape& X_shape,                    \
-      const Tensor* X_data,                                       \
-      const onnxruntime::TensorShape& B_shape,                    \
-      const Tensor* B_data,                                       \
-      Tensor* Y_data);
+#define SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(T)                                                                \
+  template Status DispatchBiasSoftMaxForwardViaDnnLibraryImpl<T>(                                               \
+      cudaStream_t stream, cudnnHandle_t cudaDnnHandle, int element_count, int batch_count, int broadcast_axis, \
+      int softmax_axis, const T* X_data, const T* B_data, T* Y_data, const BinaryElementwiseArgs& args);
 
 SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(double)
 SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(float)
-SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(MLFloat16)
+SPECIALIZED_BIAS_SOFTMAX_IMPL_VIA_DNN(half)
 
 }  // namespace cuda
 }  // namespace contrib

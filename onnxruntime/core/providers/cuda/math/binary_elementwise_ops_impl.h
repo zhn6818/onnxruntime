@@ -3,7 +3,7 @@
 
 #pragma once
 #include <stdint.h>
-#include "core/providers/cuda/shared_inc/cuda_utils.h"
+#include "core/providers/cuda/shared_inc/binary_elementwise_args.h"
 
 namespace onnxruntime {
 namespace cuda {
@@ -31,11 +31,8 @@ namespace cuda {
 // NOTE that cu files are compiled with nvcc and should not refer to any onnxruntime headers
 // so struct BinaryElementwisePreparation cannot be used here
 
-#define BINARY_ELEMENTWISE_IMPL_ARGUMENTS_DECLARATION(T, T1, T2)                                           \
-  cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type, BroadcastIndexType rhs_index_type,  \
-      gsl::span<const int64_t> lhs_strides, gsl::span<const int64_t> rhs_strides,                          \
-      gsl::span<const int64_t> output_shapes, gsl::span<const int64_t> output_strides, const T1 *lhs_data, \
-      const T2 *rhs_data, T *output_data, size_t count
+#define BINARY_ELEMENTWISE_IMPL_ARGUMENTS_DECLARATION(T, T1, T2) \
+  cudaStream_t stream, const T1 *lhs_data, const T2 *rhs_data, T *output_data, const BinaryElementwiseArgs &args
 
 #define BINARY_ELEMENTWISE_IMPL_DECLARATION(name) \
   template <typename T>                           \

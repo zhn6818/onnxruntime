@@ -47,10 +47,9 @@ Status DivGrad<T>::ComputeInternal(OpKernelContext* context) const {
   if (!da_output_tensor && !db_output_tensor) return Status::OK();
 
   BinaryElementwisePreparation prepare;
-  ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(
-      a_tensor, b_tensor,
-      // TODO: BinaryElementwiseBroadcastPrepare shall take dy_tensor as const Tensor*.
-      const_cast<Tensor*>(dy_tensor), &prepare));
+  BinaryElementwiseBroadcastPrepare(a_tensor, b_tensor,
+                                    // TODO: BinaryElementwiseBroadcastPrepare shall take dy_tensor as const Tensor*.
+                                    const_cast<Tensor*>(dy_tensor), &prepare);
   const CudaT* prepare_a_data = reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>());
   const CudaT* prepare_b_data = reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>());
   const CudaT* prepare_dy_data = reinterpret_cast<const CudaT*>(prepare.output_tensor->template Data<T>());
@@ -78,10 +77,10 @@ Status DivGrad<T>::ComputeInternal(OpKernelContext* context) const {
       db_data_ref = db_data;
     }
   }
-  ImplDivGrad<CudaT>(Stream(), prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,
-                     prepare.rhs_strides, prepare.output_dims, prepare.output_strides, prepare_a_data, prepare_b_data,
-                     prepare_dy_data, reinterpret_cast<CudaT*>(da_data_ref), reinterpret_cast<CudaT*>(db_data_ref),
-                     dy_shape.Size());
+  // TODO: a_data is needed for db_output_data only.
+  // if (!db_output_data) args.lhs_index_type = BroadcastIndexType::NoBroadcast;
+  ImplDivGrad<CudaT>(Stream(), prepare_a_data, prepare_b_data, prepare_dy_data, reinterpret_cast<CudaT*>(da_data_ref),
+                     reinterpret_cast<CudaT*>(db_data_ref), prepare.args);
 
   if (need_reduce_da) {
     auto a_output_dims = prepended_dimension_1(a_shape, dy_shape.NumDimensions());

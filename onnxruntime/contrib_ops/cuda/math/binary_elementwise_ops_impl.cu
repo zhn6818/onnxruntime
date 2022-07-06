@@ -18,18 +18,14 @@ namespace cuda {
     }                                                    \
   };
 
-#define CONTRIB_BINARY_ELEMENTWISE_IMPL(name)                                                                    \
-  CONTRIB_BINARY_ELEMENTWISE_IMPL_DECLARATION(name) {                                                            \
-    BinaryElementWiseImpl(stream, rank, lhs_index_type, rhs_index_type, lhs_strides, rhs_strides, output_shapes, \
-                          output_strides, lhs_data, rhs_data, output_data, OP_##name<T>(), count);               \
+#define CONTRIB_BINARY_ELEMENTWISE_IMPL(name)                                                                          \
+  CONTRIB_BINARY_ELEMENTWISE_IMPL_DECLARATION(name) {                                                                  \
+    BinaryElementWiseImpl(stream, lhs_data, rhs_data, output_data, args, OP_##name<T>()); \
   }
 
-#define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T)                                                  \
-  template void Impl_##x<T>(cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type,           \
-                            BroadcastIndexType rhs_index_type, gsl::span<const int64_t> lhs_strides,       \
-                            gsl::span<const int64_t> rhs_strides, gsl::span<const int64_t> output_shapes,  \
-                            gsl::span<const int64_t> output_strides, const T* lhs_data, const T* rhs_data, \
-                            T* output_data, size_t count);
+#define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T)                                              \
+  template void Impl_##x<T>(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data, \
+                            const BinaryElementwiseArgs& args);
 
 #define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL_UZILHFD(x) \
   CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, uint32_t)     \

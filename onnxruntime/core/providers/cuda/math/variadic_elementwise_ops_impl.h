@@ -5,17 +5,14 @@
 
 #include <cstdint>
 
-#include "core/providers/cuda/shared_inc/cuda_utils.h"
+#include "core/providers/cuda/shared_inc/binary_elementwise_args.h"
 
 namespace onnxruntime {
 namespace cuda {
 
 template <typename T, typename VariadicElementwiseOpTag>
-void Impl_General(cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type,
-                  BroadcastIndexType rhs_index_type, gsl::span<const int64_t> lhs_strides,
-                  gsl::span<const int64_t> rhs_strides, gsl::span<const int64_t> output_shapes,
-                  gsl::span<const int64_t> output_strides, const T* lhs_data, const T* rhs_data, T* output_data,
-                  size_t count);
+void Impl_General(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data,
+                  const BinaryElementwiseArgs& args);
 
 constexpr int32_t k_max_input_batch_size = 8;
 

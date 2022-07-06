@@ -3,7 +3,7 @@
 
 #pragma once
 #include "complex_mul.h"
-#include "core/providers/cuda/shared_inc/cuda_utils.h"
+#include "core/providers/cuda/shared_inc/binary_elementwise_args.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -12,11 +12,8 @@ namespace cuda {
 using namespace ::onnxruntime::cuda;
 
 template <typename T>
-void ComplexMul_Impl(cudaStream_t stream, size_t rank, BroadcastIndexType lhs_index_type,
-                     BroadcastIndexType rhs_index_type, gsl::span<const int64_t> lhs_strides,
-                     gsl::span<const int64_t> rhs_strides, gsl::span<const int64_t> output_shapes,
-                     gsl::span<const int64_t> output_strides, const T* lhs_data, const T* rhs_data, T* output_data,
-                     size_t count, int64_t lhs_size, int64_t rhs_size, bool is_conj);
+void ComplexMul_Impl(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data,
+                     const BinaryElementwiseArgs& args, int64_t lhs_size, int64_t rhs_size, bool is_conj);
 
 }  // namespace cuda
 }  // namespace contrib

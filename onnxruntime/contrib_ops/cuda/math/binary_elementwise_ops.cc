@@ -19,19 +19,17 @@ namespace cuda {
       (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), \
       x<T>);
 
-#define CONTRIB_BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                 \
-  template <>                                                                                                    \
-  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                 \
-    BinaryElementwisePreparation prepare;                                                                        \
-    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                             \
-    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                \
-        Stream(), prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,             \
-        prepare.rhs_strides, prepare.output_dims, prepare.output_strides,                                        \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),     \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),     \
-        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()), \
-        prepare.output_tensor->Shape().Size());                                                                  \
-    return Status::OK();                                                                                         \
+#define CONTRIB_BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                       \
+  template <>                                                                                                          \
+  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                       \
+    BinaryElementwisePreparation prepare;                                                                              \
+    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                                   \
+    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                      \
+        Stream(), reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),           \
+        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),       \
+        prepare.args);                                                                                                 \
+    return Status::OK();                                                                                               \
   }
 
 #define CONTRIB_BINARY_OP_TYPED(name, ver, T)                    \

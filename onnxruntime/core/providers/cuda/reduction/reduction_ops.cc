@@ -232,9 +232,10 @@ Status ReduceKernel<allow_multi_axes>::ReduceKernelShared(
     if (calculate_sqt_) {
       input_data_buffer = GetScratchBuffer<T>(input_count);
       input_data = reinterpret_cast<CudaT*>(input_data_buffer.get());
-      Impl_Mul<CudaT>(Stream(), input_shape.NumDimensions(), BroadcastIndexType::NoBroadcast,
-                      BroadcastIndexType::NoBroadcast, {}, {}, input_shape.AsShapeVector(), {},
-                      reinterpret_cast<const CudaT*>(X), reinterpret_cast<const CudaT*>(X), input_data, input_count);
+      BinaryElementwiseArgs args;
+      args.lhs_index_type = args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+      args.output_size = input_count;
+      Impl_Mul<CudaT>(Stream(), reinterpret_cast<const CudaT*>(X), reinterpret_cast<const CudaT*>(X), input_data, args);
     } else if (log_sum_exp_) {
       // Reduce max -- Max/Min will output indices data
       CudnnReduceDescriptor reduce_max_desc;
@@ -254,11 +255,9 @@ Status ReduceKernel<allow_multi_axes>::ReduceKernelShared(
       auto log_sum_result_buffer = GetScratchBuffer<T>(output_count);
       auto log_sum_result = log_sum_result_buffer.get();
       BinaryElementwisePreparation prepare;
-      ORT_RETURN_IF_ERROR(prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, rhs_shape, input_shape));
-      Impl_Sub<CudaT>(Stream(), prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,
-                      prepare.rhs_strides, prepare.output_dims, prepare.output_strides,
-                      reinterpret_cast<const CudaT*>(X), reinterpret_cast<CudaT*>(Y),
-                      reinterpret_cast<CudaT*>(exp_result), input_count);
+      prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, rhs_shape, input_shape);
+      Impl_Sub<CudaT>(Stream(), reinterpret_cast<const CudaT*>(X), reinterpret_cast<CudaT*>(Y),
+                      reinterpret_cast<CudaT*>(exp_result), prepare.args);
 
       Impl_Exp<CudaT>(Stream(), reinterpret_cast<CudaT*>(exp_result),
                       reinterpret_cast<CudaT*>(exp_result),
@@ -276,10 +275,11 @@ Status ReduceKernel<allow_multi_axes>::ReduceKernelShared(
                       output_count);
 
       // Log + ReduceMax
-      Impl_Add<CudaT>(Stream(), output_shape.NumDimensions(), BroadcastIndexType::NoBroadcast,
-                      BroadcastIndexType::NoBroadcast, {}, {}, output_shape.AsShapeVector(), {},
-                      reinterpret_cast<CudaT*>(log_sum_result), reinterpret_cast<CudaT*>(Y),
-                      reinterpret_cast<CudaT*>(Y), output_count);
+      BinaryElementwiseArgs args;
+      args.lhs_index_type = args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+      args.output_size = output_count;
+      Impl_Add<CudaT>(Stream(), reinterpret_cast<CudaT*>(log_sum_result), reinterpret_cast<CudaT*>(Y),
+                      reinterpret_cast<CudaT*>(Y), args);
 
       return Status::OK();
     }
@@ -455,10 +455,12 @@ Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& input, Pr
       if (calculate_sqt) {
         input_data_buffer = cuda_ep.GetScratchBuffer<T>(input_count);
         input_data = reinterpret_cast<CudaT*>(input_data_buffer.get());
-        Impl_Mul<CudaT>(stream, output_dims.size(), BroadcastIndexType::NoBroadcast, BroadcastIndexType::NoBroadcast,
-                        {}, {}, output_dims, {}, reinterpret_cast<const CudaT*>(input.template Data<T>()),
+        BinaryElementwiseArgs args;
+        args.lhs_index_type = args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+        args.output_size = input_count;
+        Impl_Mul<CudaT>(stream, reinterpret_cast<const CudaT*>(input.template Data<T>()),
                         reinterpret_cast<const CudaT*>(input.template Data<T>()),
-                        reinterpret_cast<CudaT*>(input_data_buffer.get()), input_count);
+                        reinterpret_cast<CudaT*>(input_data_buffer.get()), args);
         input_data = reinterpret_cast<const CudaT*>(input_data_buffer.get());
       }
 
@@ -541,9 +543,11 @@ Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& input, Pr
     if (calculate_sqt) {
       input_data_buffer = cuda_ep.GetScratchBuffer<T>(input_count);
       input_data = reinterpret_cast<CudaT*>(input_data_buffer.get());
-      Impl_Mul<CudaT>(stream, output_dims.size(), BroadcastIndexType::NoBroadcast, BroadcastIndexType::NoBroadcast, {},
-                      {}, output_dims, {}, reinterpret_cast<const CudaT*>(input.template Data<T>()),
-                      reinterpret_cast<const CudaT*>(input.template Data<T>()), input_data, input_count);
+      BinaryElementwiseArgs args;
+      args.lhs_index_type = args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+      args.output_size = input_count;
+      Impl_Mul<CudaT>(stream, reinterpret_cast<const CudaT*>(input.template Data<T>()),
+                      reinterpret_cast<const CudaT*>(input.template Data<T>()), input_data, args);
     } else if (log_sum_exp) {
       // cudnnReduceTensor for ReduceSum has issue if input and output has same size, we just need to copy the data for this case
       // This happens when the input is Scalar
@@ -577,12 +581,10 @@ Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& input, Pr
       auto log_sum_result_buffer = cuda_ep.GetScratchBuffer<T>(output_count);
       auto log_sum_result = log_sum_result_buffer.get();
       BinaryElementwisePreparation prepare;
-      ORT_RETURN_IF_ERROR(prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, output_shape, input_shape));
-      Impl_Sub<CudaT>(stream, prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,
-                      prepare.rhs_strides, prepare.output_dims, prepare.output_strides,
-                      reinterpret_cast<const CudaT*>(input.template Data<T>()),
+      prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, output_shape, input_shape);
+      Impl_Sub<CudaT>(stream, reinterpret_cast<const CudaT*>(input.template Data<T>()),
                       reinterpret_cast<CudaT*>(output.template MutableData<T>()), reinterpret_cast<CudaT*>(exp_result),
-                      input_count);
+                      prepare.args);
 
       Impl_Exp<CudaT>(stream,
                       reinterpret_cast<CudaT*>(exp_result),
@@ -608,10 +610,12 @@ Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& input, Pr
                       output_count);
 
       // Log + ReduceMax
-      Impl_Add<CudaT>(stream, output_dims.size(), BroadcastIndexType::NoBroadcast, BroadcastIndexType::NoBroadcast, {},
-                      {}, output_dims, {}, reinterpret_cast<CudaT*>(log_sum_result),
+      BinaryElementwiseArgs args;
+      args.lhs_index_type = args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+      args.output_size = output_count;
+      Impl_Add<CudaT>(stream, reinterpret_cast<CudaT*>(log_sum_result),
                       reinterpret_cast<CudaT*>(output.template MutableData<T>()),
-                      reinterpret_cast<CudaT*>(output.template MutableData<T>()), output_count);
+                      reinterpret_cast<CudaT*>(output.template MutableData<T>()), args);
 
       return Status::OK();
     }

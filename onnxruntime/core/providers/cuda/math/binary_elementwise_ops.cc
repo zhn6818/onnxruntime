@@ -9,6 +9,177 @@ using namespace onnxruntime::common;
 namespace onnxruntime {
 namespace cuda {
 
+namespace {
+
+static bool TryPerChannel(size_t rank, const TensorShapeVector& input_strides, const TensorShapeVector& output_shapes,
+                          int& batch, int& channel, int& height) {
+  size_t count = 0;
+  size_t dim_channel = 0;
+  for (size_t dim = 0; dim < rank; ++dim) {
+    if (output_shapes[dim] != 1 && input_strides[dim] != 0) {
+      if (count > 0) return false;
+      ++count;
+      channel = output_shapes[dim];
+      dim_channel = dim;
+    }
+  }
+  if (count == 0) return false;
+  batch = 1;
+  for (size_t dim = 0; dim < dim_channel; ++dim) {
+    batch *= static_cast<int>(output_shapes[dim]);
+  }
+  height = 1;
+  for (size_t dim = dim_channel + 1; dim < rank; ++dim) {
+    height *= static_cast<int>(output_shapes[dim]);
+  }
+  return true;
+}
+
+}  // namespace
+
+void BinaryElementwisePreparation::BinaryElementwiseBroadcastPrepareHelper(const TensorShape& lhs_shape,
+                                                                           const TensorShape& rhs_shape,
+                                                                           const TensorShape& output_shape) {
+  bool lhs_is_contiguous = true;
+  bool rhs_is_contiguous = true;
+  TensorShapeVector lhs_original_strides = TensorPitches(lhs_shape);
+  TensorShapeVector rhs_original_strides = TensorPitches(rhs_shape);
+#ifndef ORT_MINIMAL_BUILD
+  if (lhs_tensor) {
+    lhs_is_contiguous = lhs_tensor->IsContiguous();
+    if (!lhs_is_contiguous) {
+      ORT_ENFORCE(lhs_tensor->Shape() == lhs_shape);
+      lhs_original_strides = ToShapeVector(lhs_tensor->Strides());
+    }
+  }
+  if (rhs_tensor) {
+    rhs_is_contiguous = rhs_tensor->IsContiguous();
+    if (!rhs_is_contiguous) {
+      ORT_ENFORCE(rhs_tensor->Shape() == rhs_shape);
+      rhs_original_strides = ToShapeVector(rhs_tensor->Strides());
+    }
+  }
+#endif
+  args.lhs_index_type = lhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                        : lhs_is_contiguous && lhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                         : BroadcastIndexType::NeedCompute;
+  args.rhs_index_type = rhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                        : rhs_is_contiguous && rhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                         : BroadcastIndexType::NeedCompute;
+  args.output_size = static_cast<size_t>(output_shape.Size());
+
+  // Other args are not needed if none of sizes needs compute.
+  if (args.lhs_index_type != BroadcastIndexType::NeedCompute &&
+      args.rhs_index_type != BroadcastIndexType::NeedCompute) {
+    return;
+  }
+
+  size_t rank = output_shape.NumDimensions();
+  TensorShapeVector output_dims = output_shape.AsShapeVector();
+  size_t lhs_offset = rank - lhs_original_strides.size();
+  size_t rhs_offset = rank - rhs_original_strides.size();
+  TensorShapeVector lhs_strides(rank, 0);
+  for (size_t i = 0; i < lhs_original_strides.size(); ++i) {
+    lhs_strides[lhs_offset + i] = (lhs_shape[i] == 1 && output_dims[lhs_offset + i] != 1) ? 0 : lhs_original_strides[i];
+  }
+  TensorShapeVector rhs_strides(rank, 0);
+  for (size_t i = 0; i < rhs_original_strides.size(); ++i) {
+    rhs_strides[rhs_offset + i] = (rhs_shape[i] == 1 && output_dims[rhs_offset + i] != 1) ? 0 : rhs_original_strides[i];
+  }
+
+  // Coalesce the dimensions.
+  if (rank > 1) {
+    // Reverse the shape and strides for better computation.
+    TensorShapeVector reversed_shape(rank);
+    TensorShapeVector lhs_reversed_strides(rank);
+    TensorShapeVector rhs_reversed_strides(rank);
+    for (size_t dim = 0; dim < rank; ++dim) {
+      reversed_shape[dim] = output_dims[rank - 1 - dim];
+      lhs_reversed_strides[dim] = lhs_strides[rank - 1 - dim];
+      rhs_reversed_strides[dim] = rhs_strides[rank - 1 - dim];
+    }
+
+    // We can coalesce two adjacent dimensions if either dim has size 1 or if:
+    // shape[n] * stride[n] == shape[n + 1].
+    auto CanCoalesce = [&](size_t dim0, size_t dim1) {
+      auto shape0 = reversed_shape[dim0];
+      auto shape1 = reversed_shape[dim1];
+      if (shape0 == 1 || shape1 == 1) {
+        return true;
+      }
+      return shape0 * lhs_reversed_strides[dim0] == lhs_reversed_strides[dim1] &&
+             shape0 * rhs_reversed_strides[dim0] == rhs_reversed_strides[dim1];
+    };
+
+    // Replace each operands stride at dim0 with its stride at dim1.
+    auto ReplaceStride = [&](size_t dim0, size_t dim1) {
+      lhs_reversed_strides[dim0] = lhs_reversed_strides[dim1];
+      rhs_reversed_strides[dim0] = rhs_reversed_strides[dim1];
+    };
+
+    size_t prev_dim = 0;
+    for (size_t dim = 1; dim < rank; ++dim) {
+      if (CanCoalesce(prev_dim, dim)) {
+        if (reversed_shape[prev_dim] == 1) {
+          ReplaceStride(prev_dim, dim);
+        }
+        reversed_shape[prev_dim] *= reversed_shape[dim];
+      } else {
+        prev_dim++;
+        if (prev_dim != dim) {
+          ReplaceStride(prev_dim, dim);
+          reversed_shape[prev_dim] = reversed_shape[dim];
+        }
+      }
+    }
+
+    rank = prev_dim + 1;
+    reversed_shape.resize(rank);
+    lhs_reversed_strides.resize(rank);
+    rhs_reversed_strides.resize(rank);
+
+    // Reverse the shape and strides back.
+    output_dims.resize(rank);
+    lhs_strides.resize(rank);
+    rhs_strides.resize(rank);
+    for (size_t dim = 0; dim < rank; ++dim) {
+      output_dims[dim] = reversed_shape[rank - 1 - dim];
+      lhs_strides[dim] = lhs_reversed_strides[rank - 1 - dim];
+      rhs_strides[dim] = rhs_reversed_strides[rank - 1 - dim];
+    }
+  }
+
+  args.rank = rank;
+
+  // special case for lhs(N,C,H) and rhs (C,1) which is used in conv bias
+  // when N == 1: out[id] = op(lhs[id], rhs[id / H])
+  // When N > 1:  out[id] = op(lhs[id], rhs[id / H % C])
+  int batch, channel, height;
+  if (args.lhs_index_type == BroadcastIndexType::NoBroadcast &&
+      args.rhs_index_type == BroadcastIndexType::NeedCompute &&
+      TryPerChannel(rank, rhs_strides, output_dims, batch, channel, height)) {
+    args.per_channel_type = PerChannelType::RhsNeedCompute;
+    args.batch = batch;
+    args.channel = channel;
+    args.height = height;
+  } else if (args.lhs_index_type == BroadcastIndexType::NeedCompute &&
+             args.rhs_index_type == BroadcastIndexType::NoBroadcast &&
+             TryPerChannel(rank, lhs_strides, output_dims, batch, channel, height)) {
+    args.per_channel_type = PerChannelType::LhsNeedCompute;
+    args.batch = batch;
+    args.channel = channel;
+    args.height = height;
+  } else {
+    args.output_fdms.SetSize(static_cast<int>(rank));
+    TensorPitches output_strides(output_dims);
+    for (int i = 0; i < static_cast<int>(rank); ++i) {
+      args.output_fdms[i] = fast_divmod(static_cast<int>(output_strides[i]));
+    }
+    if (args.lhs_index_type == BroadcastIndexType::NeedCompute) args.lhs_strides = TArray<int64_t>(lhs_strides);
+    if (args.rhs_index_type == BroadcastIndexType::NeedCompute) args.rhs_strides = TArray<int64_t>(lhs_strides);
+  }
+}
+
 template <>
 Status BinaryElementwise<ShouldNotBroadcast>::Prepare(OpKernelContext* context, BinaryElementwisePreparation* p) const {
   p->lhs_tensor = context->Input<Tensor>(0);
@@ -17,10 +188,9 @@ Status BinaryElementwise<ShouldNotBroadcast>::Prepare(OpKernelContext* context, 
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, Node().Name(), ": mismatching input shapes: ",
                            p->lhs_tensor->Shape().ToString(), " != ", p->rhs_tensor->Shape().ToString());
   p->output_tensor = context->Output(0, p->lhs_tensor->Shape());
-  p->output_dims = p->lhs_tensor->Shape().AsShapeVector();
-  p->rank = p->output_dims.size();
-  p->lhs_index_type = BroadcastIndexType::NoBroadcast;
-  p->rhs_index_type = BroadcastIndexType::NoBroadcast;
+  p->args.lhs_index_type = BroadcastIndexType::NoBroadcast;
+  p->args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+  p->args.output_size = static_cast<size_t>(p->output_tensor->Shape().Size());
   return Status::OK();
 }
 
@@ -52,17 +222,16 @@ Status ComputeOutputShape(const std::string& node_name, const TensorShape& lhs_s
   return Status::OK();
 }
 
-Status BinaryElementwiseBroadcastPrepare(const Tensor* lhs_tensor, const Tensor* rhs_tensor, Tensor* output_tensor,
-                                         BinaryElementwisePreparation* p, const TensorShape* override_lhs_shape,
-                                         const TensorShape* override_rhs_shape) {
+void BinaryElementwiseBroadcastPrepare(const Tensor* lhs_tensor, const Tensor* rhs_tensor, Tensor* output_tensor,
+                                       BinaryElementwisePreparation* p, const TensorShape* override_lhs_shape,
+                                       const TensorShape* override_rhs_shape) {
   p->lhs_tensor = lhs_tensor;
   p->rhs_tensor = rhs_tensor;
   const auto& lhs_shape = override_lhs_shape ? *override_lhs_shape : lhs_tensor->Shape();
   const auto& rhs_shape = override_rhs_shape ? *override_rhs_shape : rhs_tensor->Shape();
   p->output_tensor = output_tensor;
   const auto& output_shape = output_tensor->Shape();
-  ORT_RETURN_IF_ERROR(p->BinaryElementwiseBroadcastPrepareHelper(lhs_shape, rhs_shape, output_shape));
-  return Status::OK();
+  p->BinaryElementwiseBroadcastPrepareHelper(lhs_shape, rhs_shape, output_shape);
 }
 
 template <>
@@ -71,13 +240,10 @@ Status BinaryElementwise<ShouldBroadcast>::Prepare(OpKernelContext* context, Bin
   auto rhs_tensor = context->Input<Tensor>(1);
   const auto& lhs_shape = lhs_tensor->Shape();
   const auto& rhs_shape = rhs_tensor->Shape();
-
   TensorShape output_shape;
   ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), lhs_shape, rhs_shape, output_shape));
   auto output_tensor = context->Output(0, output_shape);
-
-  ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(lhs_tensor, rhs_tensor, output_tensor, p));
-
+  BinaryElementwiseBroadcastPrepare(lhs_tensor, rhs_tensor, output_tensor, p);
   return Status::OK();
 }
 
@@ -152,19 +318,17 @@ Status BinaryElementwise<ShouldBroadcast>::Prepare(OpKernelContext* context, Bin
       CREATE_BEW_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()),                   \
       class_name<T>);
 
-#define BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                         \
-  template <>                                                                                                    \
-  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                 \
-    BinaryElementwisePreparation prepare;                                                                        \
-    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                             \
-    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                \
-        Stream(), prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,             \
-        prepare.rhs_strides, prepare.output_dims, prepare.output_strides,                                        \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),     \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),     \
-        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()), \
-        prepare.output_tensor->Shape().Size());                                                                  \
-    return Status::OK();                                                                                         \
+#define BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                               \
+  template <>                                                                                                          \
+  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                       \
+    BinaryElementwisePreparation prepare;                                                                              \
+    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                                   \
+    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                      \
+        Stream(), reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),           \
+        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),       \
+        prepare.args);                                                                                                 \
+    return Status::OK();                                                                                               \
   }
 
 #define BINARY_OP_VERSIONED_TYPED(name, startver, endver, T) \
@@ -347,14 +511,12 @@ ONNX_OPERATOR_KERNEL_EX(
         .TypeConstraint("T1", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>()),
     Pow);
 
-#define TYPED_IMPLT1_POW(type)                                                                                        \
-  ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<type>::MappedType>(                              \
-      stream, prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides, prepare.rhs_strides, \
-      prepare.output_dims, prepare.output_strides,                                                                    \
-      reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),            \
-      reinterpret_cast<const typename ToCudaType<type>::MappedType*>(prepare.rhs_tensor->template Data<type>()),      \
-      reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),        \
-      prepare.output_tensor->Shape().Size())
+#define TYPED_IMPLT1_POW(type)                                                                                     \
+  ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<type>::MappedType>(                           \
+      stream, reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+      reinterpret_cast<const typename ToCudaType<type>::MappedType*>(prepare.rhs_tensor->template Data<type>()),   \
+      reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),     \
+      prepare.args)
 
 namespace pow12_internal {
 template <class T>
@@ -423,12 +585,10 @@ Status CompareFunction<T, CudaT>::CompareMethod(OpKernelContext* context, ImplCo
   BinaryElementwisePreparation prepare;
   ORT_RETURN_IF_ERROR(Prepare(context, &prepare));
 
-  Impl_Compare(Stream(), prepare.rank, prepare.lhs_index_type, prepare.rhs_index_type, prepare.lhs_strides,
-               prepare.rhs_strides, prepare.output_dims, prepare.output_strides,
-               reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+  Impl_Compare(Stream(), reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
                reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
                reinterpret_cast<ToCudaType<bool>::MappedType*>(prepare.output_tensor->template MutableData<bool>()),
-               prepare.output_tensor->Shape().Size());
+               prepare.args);
 
   return Status::OK();
 }
