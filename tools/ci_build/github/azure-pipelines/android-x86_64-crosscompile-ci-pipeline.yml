@@ -86,7 +86,7 @@ jobs:
     inputs:
       contents: |
         build/Debug/onnxruntime_test_all
-        build/Debug/onnxruntime_test_runner
+        build/Debug/onnx_test_runner
       targetFolder: $(Build.ArtifactStagingDirectory)
       overWrite: true
 
