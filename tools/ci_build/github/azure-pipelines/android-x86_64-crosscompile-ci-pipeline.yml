@@ -221,7 +221,9 @@ jobs:
   - task: CopyFiles@2
     displayName: Copy Test Executables
     inputs:
-      contents: 'build_nnapi/Debug/*'
+      contents: |
+        build/Debug/onnxruntime_test_all
+        build/Debug/onnx_test_runner
       targetFolder: $(Build.ArtifactStagingDirectory)
       overWrite: true
 
