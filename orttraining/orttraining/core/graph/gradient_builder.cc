@@ -709,6 +709,18 @@ IMPLEMENT_GRADIENT_BUILDER(GetLogSoftmaxGradient) {
               SrcNodeAttributes())};
 }
 
+// FOR DEBUG ONLY!!!
+IMPLEMENT_GRADIENT_BUILDER(GetBiasSoftmaxDropoutGradient) {
+  auto attributes = SrcNodeAttributes();
+  ORT_ENFORCE(utils::HasInt(attributes.at("softmax_axis")));
+  auto axis = attributes.at("softmax_axis").i();
+  std::vector<AttributeProto> new_attributes;
+  new_attributes.push_back(MakeAttribute("axis", axis));
+  return std::vector<NodeDef>{
+      NodeDef(OpDef{"SoftmaxDropoutGrad", kMSDomain, 1}, {GO(0), O(1), O(2)}, {GI(0)}, new_attributes),
+      NodeDef(NodeDef("Identity", {GI(0)}, {GI(1)}))};
+}
+
 IMPLEMENT_GRADIENT_BUILDER(GetUnsqueezeGradient) {
   if (SrcNodeOpsetVersion() < 13) {
     return std::vector<NodeDef>{

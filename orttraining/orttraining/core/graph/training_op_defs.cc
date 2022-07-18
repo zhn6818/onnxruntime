@@ -2123,6 +2123,26 @@ Example 4:
       .TypeConstraint("T2", {"tensor(bool)"}, "Constrain 'training_mode' type to boolean tensor.")
       .TypeConstraint("T3", {"tensor(uint32)"}, "Constrain 'mask' type to bit-packed uint32 tensor.");
 
+  ONNX_CONTRIB_OPERATOR_SCHEMA(SoftmaxDropoutGrad)
+      .SetDomain(kMSDomain)
+      .SinceVersion(1)
+      .SetDoc("SoftmaxDropoutGrad")
+      .Attr("axis", "apply softmax to elements for dimensions axis or higher", AttributeProto::INT)
+      .AllowUncheckedAttributes()
+      .Input(0, "dy", "The gradient tensor from output.", "T")
+      .Input(1, "mask", "The mask output of the dropout. ", "T2")
+      .Input(2, "softmax_y", "The output of Softmax.", "T")
+      .Input(3, "ratio",
+             "Same value as the ratio input supplied to the dropout op with value in [0, 1). "
+             "If this input is not specified, a default value of 0.5 is used.",
+             "T1", OpSchema::Optional)
+      .Output(0, "dx", "Gradient of the input.", "T")
+      .TypeConstraint("T", {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(bfloat16)"},
+                      "Constrain input and output types to float tensors.")
+      .TypeConstraint("T1", {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(bfloat16)"},
+                      "Constrain input 'ratio' types to float tensors.")
+      .TypeConstraint("T2", {"tensor(bool)"}, "Constrain mask input to boolean tensors.");
+
   ONNX_CONTRIB_OPERATOR_SCHEMA(BroadcastGradientArgs)
       .SetDomain(kMSDomain)
       .SinceVersion(1)

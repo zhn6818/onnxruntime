@@ -1246,7 +1246,7 @@ class Graph {
   // Options to control Graph::Resolve.
   struct ResolveOptions {
     // Whether to override existing types with inferred types.
-    bool override_types = false;
+    bool override_types = true;
     // Names of initializers to keep even if unused (optional).
     const std::unordered_set<std::string>* initializer_names_to_preserve = nullptr;
     // Whether to set that no proto sync is required after resolving.

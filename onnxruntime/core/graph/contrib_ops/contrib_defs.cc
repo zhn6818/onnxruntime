@@ -2526,6 +2526,46 @@ This op functions in much the same was as Dropout-11 and Dropout-13 do, execpt t
                       "Allow inputs and outputs to be any kind of tensor.");
 #endif
 
+  ONNX_CONTRIB_OPERATOR_SCHEMA(BiasSoftmaxDropout)
+      .SetDomain(kMSDomain)
+      .SinceVersion(1)
+      .SetSupportLevel(OpSchema::SupportType::EXPERIMENTAL)
+      .SetDoc(
+          "output, dropout_bitmask = Dropout(Softmax(data + bias), ratio), "
+          "Intended to specialize the softmax + dropout pattern commonly found in transformer models.")
+      .Attr("softmax_axis", "apply softmax to elements for dimensions softmax_axis or higher", AttributeProto::INT,
+            static_cast<int64_t>(1))
+      .Attr("broadcast_axis", "broadcast bias across input for dimensions broadcast_axis to softmax_axis-1",
+            AttributeProto::INT, static_cast<int64_t>(1))
+      .Attr("seed", "(Optional) Seed to the random generator, if not specified we will auto generate one.",
+            AttributeProto::INT, OPTIONAL_VALUE)
+      .AllowUncheckedAttributes()
+      .Input(0, "data", "The input data as Tensor.", "T")
+      .Input(1, "bias", "The bias (or mask) as Tensor.", "T")
+      .Input(2, "ratio",
+             "The ratio of random dropout, with value in [0, 1). If this input was not set, "
+             "or if it was set to 0, the output would be a simple copy of the input. "
+             "If it's non-zero, output will be a random dropout of the scaled input, which is typically "
+             "the case during training. It is an optional value, if not specified it will default to 0.5.",
+             "T1", OpSchema::Optional)
+      .Output(0, "output", "The output.", "T")
+      .Output(1, "mask", "The output mask of dropout.", "T2")
+      .Output(2, "softmax_output", "The Softmax output for backward.", "T")
+      .TypeConstraint("T", {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(bfloat16)"},
+                      "Constrain input and output types to float tensors.")
+      .TypeConstraint("T1", {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(bfloat16)"},
+                      "Constrain input 'ratio' types to float tensors.")
+      .TypeConstraint("T2", {"tensor(bool)"}, "Constrain mask output to boolean tensors.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        propagateShapeAndTypeFromFirstInput(ctx);
+        updateOutputElemType(ctx, 1, ONNX_NAMESPACE::TensorProto::BOOL);
+        propagateElemTypeFromInputToOutput(ctx, 0, 2);
+        if (hasNInputShapes(ctx, 1)) {
+          propagateShapeFromInputToOutput(ctx, 0, 1);
+          propagateShapeFromInputToOutput(ctx, 0, 2);
+        }
+      });
+
 #ifndef _OPSCHEMA_LIB_
   // Register the NCHWc schemas if supported by the platform.
   if (MlasNchwcGetBlockSize() > 1) {
