@@ -54,8 +54,8 @@ jobs:
         DockerBuildArgs: "--build-arg BUILD_UID=$( id -u ) --build-arg BASEIMAGE=nvidia/cuda:11.4.3-cudnn8-devel-centos7"
         Repository: onnxruntimecuda11centosbuild
     - bash: |
-        sudo yum remove devtoolset-11*
-        sudo yum install devtoolset-11-11.0-3.el7.x86_64
+        yum remove devtoolset-11*
+        yum install devtoolset-11-11.0-3.el7.x86_64
       displayName: downgrade devetoolset to 11.0.3 (Remove when Cuda >=11.6)
 
     - script: $(Build.SourcesDirectory)/tools/ci_build/github/linux/build_cuda_c_api_package.sh
