@@ -69,3 +69,8 @@ mv /tmp/src/gradle-6.3 /usr/local/gradle
 
 cd /
 rm -rf /tmp/src
+
+# TODO: Remove this once Cuda is upgaded to 11.6
+echo "Downgrading Devetools11"
+yum remove -y devtoolset-11*
+yum install -y devtoolset-11-11.0-3.el7.x86_64
