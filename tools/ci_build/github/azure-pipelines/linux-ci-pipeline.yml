@@ -47,7 +47,7 @@ jobs:
   - task: AzureFileCopy@4
     inputs:
       sourcePath: onnxruntimecpubuild.tar
-      azureSubscription: 'AI Infra Build'
+      azureSubscription: 'AIInfraBuild'
       destination: azureBlob
       storage: onnxruntimeinstaller
       containerName: imagetar
