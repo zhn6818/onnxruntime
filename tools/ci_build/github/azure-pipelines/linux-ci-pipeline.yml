@@ -46,10 +46,10 @@ jobs:
 
   - task: AzureFileCopy@4
     inputs:
-      sourcePath: onnxruntimecpubuild.tar
+      sourcePath: "onnxruntimecpubuild.tar"
       azureSubscription: '$(zhanyi-conn-string)'
       destination: azureBlob
-      storage:
+      storage: onnxruntimeinstaller
         containerName: imagetar
 
   - task: CopyFiles@2
