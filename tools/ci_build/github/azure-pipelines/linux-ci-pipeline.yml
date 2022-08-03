@@ -45,7 +45,7 @@ jobs:
       RunAsPreJob: false
 
   - script: |
-      az storage blob upload -f onnxruntimecpubuild.tar -c myimages -n MyBlob
+      az storage blob upload -f onnxruntimecpubuild.tar -c myimages --connection-string '$(zhanyi-conn-string)'
     displayName: upload
 
 
