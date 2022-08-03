@@ -37,6 +37,21 @@ jobs:
      docker save onnxruntimecpubuild > onnxruntimecpubuild.tar
     displayName: save docker image
 
+  - task: AzureKeyVault@2
+    inputs:
+      connectedServiceName: 'AIInfraBuild'
+      KeyVaultName: 'zhanyi-cache-test'
+      SecretsFilter: 'zhanyi-conn-string'
+      RunAsPreJob: false
+
+  - task: AzureFileCopy@4
+    inputs:
+      sourcePath: onnxruntimecpubuild.tar
+      azureSubscription: '$(zhanyi-conn-string)'
+      destination: azureBlob
+      storage:
+        containerName: imagetar
+
   - task: CopyFiles@2
     inputs:
       contents: onnxruntimecpubuild.tar
