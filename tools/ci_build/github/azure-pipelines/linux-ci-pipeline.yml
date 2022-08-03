@@ -35,7 +35,7 @@ jobs:
 
   - script: |
      docker save onnxruntimecpubuild > onnxruntimecpubuild.tar
-     displayName: save docker image
+    displayName: save docker image
 
   - task: CopyFiles@2
     inputs:
