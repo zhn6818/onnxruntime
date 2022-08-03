@@ -44,13 +44,10 @@ jobs:
       SecretsFilter: 'zhanyi-conn-string'
       RunAsPreJob: false
 
-  - task: AzureFileCopy@4
-    inputs:
-      sourcePath: onnxruntimecpubuild.tar
-      azureSubscription: 'AIInfraBuild'
-      destination: azureBlob
-      storage: onnxruntimeinstaller
-      containerName: imagetar
+  - script: |
+      az storage blob upload -f onnxruntimecpubuild.tar -c myimages -n MyBlob
+    displayName: upload
+
 
   - task: CopyFiles@2
     inputs:
