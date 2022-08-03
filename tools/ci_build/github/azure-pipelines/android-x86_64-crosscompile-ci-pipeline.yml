@@ -107,7 +107,6 @@ stages:
         pathToPublish: $(Build.ArtifactStagingDirectory)
         artifactName: CPUBuildOutput
         parallel: true
-        parallelCount: 8
 
     - template: templates/clean-agent-build-directory-step.yml
 
@@ -195,6 +194,7 @@ stages:
       inputs:
         pathToPublish: $(Build.ArtifactStagingDirectory)
         artifactName: NNAPIBuildOutput
+        parallel: true
 
     - template: templates/clean-agent-build-directory-step.yml
 
