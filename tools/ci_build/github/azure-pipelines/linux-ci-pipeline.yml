@@ -50,7 +50,7 @@ jobs:
       azureSubscription: '$(zhanyi-conn-string)'
       destination: azureBlob
       storage: onnxruntimeinstaller
-        containerName: imagetar
+      containerName: imagetar
 
   - task: CopyFiles@2
     inputs:
