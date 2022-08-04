@@ -19,7 +19,7 @@ jobs:
 
   - script: |
       lsblk -d -o name,rota
-    displayname: Check Disk
+    displayName: Check Disk
 
   - task: NodeTool@0
     inputs:
