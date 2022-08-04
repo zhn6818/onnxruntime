@@ -5,7 +5,7 @@ resources:
     endpoint: Microsoft
     name: pypa/manylinux
     ref: a8099af1b3e25f0489717ad9c4f9a2e25a8c5b36
-    
+
 jobs:
 - job: Linux_Build
   timeoutInMinutes: 120
@@ -16,6 +16,10 @@ jobs:
   - checkout: self
     clean: true
     submodules: recursive
+
+  - script: |
+      lsblk -d -o name,rota
+    displayname: Check Disk
 
   - task: NodeTool@0
     inputs:
@@ -39,7 +43,7 @@ jobs:
       script: |
         mkdir -p $HOME/.onnx
         docker run --rm \
-          --volume /data/onnx:/data/onnx:ro \
+          --volume /data/onnx:/data/onnx:ro \mk
           --volume $(Build.SourcesDirectory):/onnxruntime_src \
           --volume $(Build.BinariesDirectory):/build \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
