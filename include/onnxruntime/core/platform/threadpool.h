@@ -20,6 +20,8 @@ limitations under the License.
 #include <vector>
 #include <functional>
 #include <memory>
+
+#include "core/common/callables.h"
 #include "core/common/common.h"
 #include "core/platform/env.h"
 
@@ -137,6 +139,10 @@ class ExtendedThreadPoolInterface;
 class LoopCounter;
 class ThreadPoolParallelSection;
 
+namespace threadpool_details {
+
+}
+
 class ThreadPool {
  public:
 #ifdef _WIN32
@@ -204,11 +210,7 @@ class ThreadPool {
   private:
     friend class ThreadPool;
 
-    // Owning reference for the underlying ThreadPoolParallelSection
-    // which implements the thread management.  We use an explicit
-    // deleter here so that the definition of
-    // ThreadPoolParallelSection does not need to be available at this
-    // point to avoid a dependence on the Eigen headers.
+    // Pointer to a thread-local instance
     ThreadPoolParallelSection* ps_{nullptr};
     ThreadPool *tp_;
     ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(ParallelSection);

@@ -33,6 +33,7 @@
 #pragma warning(disable : 4805)
 #endif
 #include <memory>
+#include <variant>
 #include "unsupported/Eigen/CXX11/ThreadPool"
 
 #if defined(__GNUC__)
@@ -41,6 +42,7 @@
 #pragma warning(pop)
 #endif
 #include "core/common/denormal.h"
+#include "core/common/callables.h"
 #include "core/common/inlined_containers_fwd.h"
 #include "core/common/spin_pause.h"
 #include "core/platform/ort_mutex.h"
@@ -168,6 +170,68 @@ enum class PushResult {
   ACCEPTED_BUSY
 };
 
+/// <summary>
+/// An instance that we are going to store as a task in a thread-poll circular buffer
+/// </summary>
+class ThreadPoolTask {
+ public:
+  using Callable_t = Callable<void>;
+  // This is the case when we absorb a function that is thrown from Schedule()
+  // so we need to store it someplace
+  ThreadPoolTask(std::function<void()> fn) noexcept
+      : fn_(std::move(fn)) {
+  }
+
+  // Typical case for PS when the call to run in parallel is synchronous
+  // and the original user-supplied functor (or a chain of functors) lives on the stack
+  ThreadPoolTask(Callable_t call) noexcept
+      : fn_(call) {}
+
+  ORT_DISALLOW_ASSIGNMENT(ThreadPoolTask);
+
+  ThreadPoolTask(ThreadPoolTask&&) = default;
+  ThreadPoolTask& operator=(ThreadPoolTask&&) = default;
+
+  struct Visitor {
+    void operator()(Callable_t fn) const { fn.Invoke(); }
+    void operator()(const std::function<void()>& fn) const { fn(); }
+  };
+
+  void operator()() const {
+    std::visit(Visitor(), fn_);
+  }
+
+  operator bool() const noexcept { return Valid(); }
+
+  bool Valid() const noexcept { return fn_.index() != std::variant_npos; }
+
+ private:
+   // We may want to simplify it to get rid of a potential branching
+   // inside the visitor
+  std::variant<Callable_t, std::function<void()>> fn_;
+};
+
+template <typename F>
+class FunctorCallback {
+ public:
+  using Callable_t = Callable<void, unsigned>;
+
+  explicit FunctorCallback(F& f) noexcept
+      : f_(f) {}
+
+  void Func(unsigned idx) {
+    f_(idx);
+  }
+
+  Callable_t GetCallable() noexcept {
+    CallableFactory<FunctorCallback, void, unsigned> f(this);
+    return f.GetCallable<&FunctorCallback::Func>();
+  }
+
+ private:
+  F& f_;
+};
+
 // Align to avoid false sharing with prior fields.  If required,
 // alignment or padding must be added subsequently to avoid false
 // sharing with later fields.  Note that:
@@ -277,7 +341,7 @@ class ThreadPoolProfiler {
     std::thread::id thread_id_;
     uint64_t num_run_ = 0;
     onnxruntime::TimePoint last_logged_point_ = Clock::now();
-    int32_t core_ = -1;                   //core that the child thread is running on
+    int32_t core_ = -1;  //core that the child thread is running on
   };
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -310,7 +374,7 @@ class ExtendedThreadPoolInterface : public Eigen::ThreadPoolInterface {
   // The parameter idx provides a loop-local thread ID in the range
   // [0,k) where k<=n.
   virtual void RunInParallelSection(ThreadPoolParallelSection& ps,
-                                    std::function<void(unsigned idx)> fn,
+                                    Callable<void, unsigned> fn,
                                     unsigned n, std::ptrdiff_t block_size) = 0;
 
   // Special case alternative to RunInParallelSection for use without
@@ -327,7 +391,7 @@ class ExtendedThreadPoolInterface : public Eigen::ThreadPoolInterface {
   //
   // [ Note that this 20% overhead is more than paid for when we have
   // two loops execute in series in a parallel section. ]
-  virtual void RunInParallel(std::function<void(unsigned idx)> fn,
+  virtual void RunInParallel(Callable<void, unsigned> fn,
                              unsigned n, std::ptrdiff_t block_size) = 0;
   virtual void StartProfiling() = 0;
   virtual std::string StopProfiling() = 0;
@@ -387,10 +451,10 @@ class ThreadPoolParallelSection {
 
 class ThreadPoolLoop {
  public:
-  ThreadPoolLoop(std::function<void(unsigned)> f, unsigned t) : fn(std::move(f)), threads_needed(t) {
+  ThreadPoolLoop(Callable<void, unsigned> f, unsigned t) : fn(f), threads_needed(t) {
   }
 
-  const std::function<void(unsigned)> fn;
+  const Callable<void, unsigned> fn;
   const unsigned threads_needed;
 
  private:
@@ -724,8 +788,8 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     uint32_t v_ = 0;
   };
 
-  typedef std::function<void()> Task;
-  typedef RunQueue<Task, Tag, 1024> Queue;
+  using Task = ThreadPoolTask;
+  using Queue = RunQueue<Task, Tag, 1024>;
 
   ThreadPoolTempl(const CHAR_TYPE* name, int num_threads, bool allow_spinning, Environment& env,
                   const ThreadOptions& thread_options)
@@ -1113,7 +1177,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
                              ThreadPoolParallelSection& ps,
                              unsigned new_dop,
                              bool dispatch_async,
-                             std::function<void(unsigned)> worker_fn) {
+                             Callable<void, unsigned> worker_fn) {
     // Ensure that the vector of preferred workers is sufficient for the
     // size of the loop we are entering.  We do this before dispatching
     // tasks for the loop in order to avoid any races between changes to
@@ -1138,7 +1202,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
         assert(current_dop == 1);
 
         // Task for dispatching work asynchronously.
-        Task dispatch_task = [current_dop, new_dop, worker_fn, &preferred_workers, &ps, &pt, this]() {
+        auto dispatch_task = [current_dop, new_dop, worker_fn, &preferred_workers, &ps, &pt, this]() {
           // Record that dispatch work has started.  This must occur
           // prior to scheduling tasks, in order to synchronize with
           // EndParallelSectionInternal.  [ If EndParallelSection
@@ -1195,7 +1259,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   // threads for the desired degree of parallelism, followed by
   // dispatching the loop to those workers.
   void RunInParallelSection(ThreadPoolParallelSection& ps,
-                            std::function<void(unsigned idx)> fn,
+                            Callable<void, unsigned> fn,
                             unsigned n,
                             std::ptrdiff_t block_size) override {
     ORT_ENFORCE(n <= num_threads_ + 1, "More work items than threads");
@@ -1213,7 +1277,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
 
     // Increase the worker count if needed.  Each worker will pick up
     // loops to execute from the current parallel section.
-    std::function<void(unsigned)> worker_fn = [&ps](unsigned par_idx) {
+    auto worker_lb = [&ps](unsigned par_idx) {
       while (ps.active) {
         if (ps.current_loop.load() == nullptr) {
           onnxruntime::concurrency::SpinPause();
@@ -1221,18 +1285,21 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
           ps.workers_in_loop++;
           ThreadPoolLoop* work_item = ps.current_loop;
           if (work_item && par_idx < work_item->threads_needed) {
-            work_item->fn(par_idx);
+            work_item->fn.Invoke(par_idx);
           }
           ps.workers_in_loop--;
         }
       }
     };
-    RunInParallelInternal(*pt, ps, n, false, std::move(worker_fn));
+
+    FunctorCallback<decltype(worker_lb)> worker_fn(worker_lb);
+
+    RunInParallelInternal(*pt, ps, n, false, worker_fn.GetCallable());
     assert(ps.dispatch_q_idx == -1);
     profiler_.LogEndAndStart(ThreadPoolProfiler::DISTRIBUTION);
 
     // Run work in the main thread
-    loop.fn(0);
+    fn.Invoke(0);
     profiler_.LogEndAndStart(ThreadPoolProfiler::RUN);
 
     // Wait for workers to exit the loop
@@ -1255,7 +1322,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   //  2. run fn(...) itself.
   // For all other threads:
   //  1. run fn(...);
-  void RunInParallel(std::function<void(unsigned idx)> fn, unsigned n, std::ptrdiff_t block_size) override {
+  void RunInParallel(Callable<void, unsigned> fn, unsigned n, std::ptrdiff_t block_size) override {
     ORT_ENFORCE(n <= num_threads_ + 1, "More work items than threads");
     profiler_.LogStartAndCoreAndBlock(block_size);
     PerThread* pt = GetPerThread();
@@ -1263,7 +1330,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     StartParallelSectionInternal(*pt, ps);
     RunInParallelInternal(*pt, ps, n, true, fn);  // select dispatcher and do job distribution;
     profiler_.LogEndAndStart(ThreadPoolProfiler::DISTRIBUTION);
-    fn(0);  // run fn(0)
+    fn.Invoke(0);  // run fn(0)
     profiler_.LogEndAndStart(ThreadPoolProfiler::RUN);
     EndParallelSectionInternal(*pt, ps);  // wait for all
     profiler_.LogEnd(ThreadPoolProfiler::WAIT);
@@ -1322,7 +1389,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
 #pragma warning(push)
 // C4324: structure was padded due to alignment specifier
 #pragma warning(disable : 4324)
-#endif // _MSC_VER
+#endif  // _MSC_VER
 
   struct ORT_ALIGN_TO_AVOID_FALSE_SHARING PerThread {
     constexpr PerThread() : pool(nullptr) {
@@ -1344,8 +1411,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
 
 #ifdef _MSC_VER
 #pragma warning(pop)
-#endif // _MSC_VER
-
+#endif  // _MSC_VER
 
   struct WorkerData {
     constexpr WorkerData() : thread(), queue() {

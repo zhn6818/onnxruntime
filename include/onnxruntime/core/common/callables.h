@@ -54,31 +54,38 @@ public:
   // For methods we want to make use of AsyncMethodCallback
   // And covert it to a Callable
   Callable(ContextType*  context,
-    FunctionType func) :
+    FunctionType func) noexcept :
     context_(context),
     func_(func) {
   }
 
-  Callable() : Callable(nullptr, nullptr) {}
+  Callable() noexcept : Callable(nullptr, nullptr) {}
 
   Callable(const Callable&) = default;
   Callable& operator=(const Callable&) = default;
 
-  Callable(Callable&&) = default;
-  Callable& operator=(Callable&&) = default;
+  Callable(Callable&& o) noexcept : context_(o.context_), func_(o.func_) {
+    o.Clear();
+  }
 
-  void Clear() {
+  Callable& operator=(Callable&& o) noexcept {
+    context_ = o.context_;
+    func_ = o.func_;
+    o.Clear();
+  }
+
+  void Clear() noexcept {
     context_ = nullptr;
     func_ = nullptr;
   }
 
-  operator bool() const { return func_ != nullptr; }
+  operator bool() const noexcept { return func_ != nullptr; }
 
-  bool Valid() const { return func_ != nullptr; }
+  bool Valid() const noexcept { return func_ != nullptr; }
 
-  ContextType* GetContext() const { return context_; }
+  ContextType* GetContext() const noexcept { return context_; }
 
-  FunctionType GetFunctionPtr() const { return func_; }
+  FunctionType GetFunctionPtr() const noexcept { return func_; }
 
   // Differentiate instantiation on the presence
   // of return value. The below two overloads
@@ -110,7 +117,7 @@ public:
   CallableType = Callable<ResultType,Args...>;
 
   explicit
-  CallableFactory(ObjectType* obj) :
+  CallableFactory(ObjectType* obj) noexcept :
     obj_(obj) {
   }
 
@@ -135,7 +142,7 @@ public:
   };
 
   template<ResultType (ObjectType::*MethodPtr)(Args...)>
-  CallableType GetCallable() const {
+  CallableType GetCallable() const noexcept {
     CallableType result(obj_, &Binder<ResultType,MethodPtr>::InvokeMethod);
       return result;
   }
