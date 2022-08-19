@@ -72,6 +72,7 @@ public:
     context_ = o.context_;
     func_ = o.func_;
     o.Clear();
+    return *this;
   }
 
   void Clear() noexcept {
